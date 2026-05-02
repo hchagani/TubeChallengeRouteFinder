@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 import pytest
-from unittest.mock import ANY, MagicMock, patch
+from unittest.mock import ANY, MagicMock, Mock, patch
 
 from fastapi import BackgroundTasks, Response, status
 
@@ -96,11 +96,12 @@ def test_create_graph__rebuild_flag_passed_correctly(
             mock_create.assert_called_once_with(session=ANY, rebuild=True)
 
 
-def test_get_graph__returns_database_record(response: Response):
+def test_get_graph__returns_database(response: Response):
     with patch("tubechallenge.api.graph.graph.get_one") as mock_get:
         mock_get.return_value = Graph(id=1, status=StatusFlag.COMPLETED)
+        mock_session = Mock()
 
-        result = graph.get_graph(response)
+        result = graph.get_graph(response, session=mock_session, graph_id=1)
 
         assert response.status_code == status.HTTP_200_OK
         assert result["id"] == 1
@@ -112,8 +113,38 @@ def test_get_graph__returns_database_record(response: Response):
 def test_get_graph__no_database_record(response: Response):
     with patch("tubechallenge.api.graph.graph.get_one") as mock_get:
         mock_get.return_value = None
+        mock_session = Mock()
 
-        result = graph.get_graph(response)
+        result = graph.get_graph(response, session=mock_session, graph_id=1)
+
+        assert response.status_code == status.HTTP_404_NOT_FOUND
+        assert result["id"] is None
+        assert result["status"] is None
+        assert result["message"] == "Graph does not exist yet."
+
+        mock_get.assert_called_once()
+
+
+def test_get_graph__returns_database_record_no_graph_id(response: Response):
+    with patch("tubechallenge.api.graph.graph.get_many") as mock_get:
+        mock_get.return_value = [Graph(id=1, status=StatusFlag.COMPLETED)]
+        mock_session = Mock()
+
+        result = graph.get_graph(response, session=mock_session)
+
+        assert response.status_code == status.HTTP_200_OK
+        assert result["id"] == 1
+        assert result["status"] == StatusFlag.COMPLETED.value
+
+        mock_get.assert_called_once()
+
+
+def test_get_graph__no_database_record_no_graph_id(response: Response):
+    with patch("tubechallenge.api.graph.graph.get_many") as mock_get:
+        mock_get.return_value = []
+        mock_session = Mock()
+
+        result = graph.get_graph(response, session=mock_session)
 
         assert response.status_code == status.HTTP_404_NOT_FOUND
         assert result["id"] is None

@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from tubechallenge.db.graph import get_many as get_graphs
 from tubechallenge.db.schemas import CreateStation
 from tubechallenge.db.tables import Station
 
@@ -11,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def create(station_infos: list[dict], session: Session) -> list[dict]:
+def create(station_infos: list[dict], session: Session) -> list[Station] | None:
     """Create new station records.
 
     Args:
@@ -21,11 +22,19 @@ def create(station_infos: list[dict], session: Session) -> list[dict]:
     Returns:
         list of created station records
     """
-    # Validation station dictionary and create records
+    graph_ids = {station_info["graph_id"] for station_info in station_infos}
+    db_graph_ids = {g.id for g in get_graphs(session, graph_ids=graph_ids)}
+
+    # Validate station dictionary and create records
     stations = []
     for station_info in station_infos:
         try:
-            CreateStation(**station_info)
+            validated_station = CreateStation(**station_info)
+
+            if validated_station.graph_id not in db_graph_ids:
+                logger.error(f"Invalid graph ID {validated_station.graph_id}")
+                return None
+
             stations.append(Station(**station_info))
         except ValidationError as err:
             logger.error(
@@ -49,12 +58,26 @@ def create(station_infos: list[dict], session: Session) -> list[dict]:
     return stations
 
 
-def get_one(station_id: str, session: Session):
-    """Get station record."""
-    return session.query(Station).filter_by(station_id=station_id).first()
+def get_one(station_id: str, graph_id: int, session: Session):
+    """Get station record related to a particular graph record.
+
+    Args:
+        station_id (str): TfL's ID of station record to retrieve.
+        graph_id (int): ID of related graph record.
+        session (Session): database session.
+
+    Returns:
+        requested station record.
+    """
+    return (
+        session.query(Station)
+        .filter_by(station_id=station_id, graph_id=graph_id)
+        .first()
+    )
 
 
 def get_many(
+    graph_id: int,
     session: Session,
     station_ids: list[str] | None = None,
     latitude_min: float | None = None,
@@ -64,8 +87,23 @@ def get_many(
     limit: int = 0,
     offset: int = 0,
 ):
-    """Get all station records."""
-    query = session.query(Station)
+    """Get all station records related to a particular graph record.
+
+    Args:
+        graph_id (int): ID of related graph record.
+        session (Session): database session.
+        station_ids (list[str]): list of station IDs to retrieve.
+        latitude_min (float): station's minimum latitude coordinate.
+        latitude_max (float): station's maximum latitude coordinate.
+        longitude_min (float): station's minimum longitude coordinate.
+        longitude_max (float): station's maximum longitude coordinate.
+        limit (int): maximum number of station records to retrieve.
+        offset (int): index of first station record to retrieve.
+
+    Returns:
+        list of station records ordered by ID.
+    """
+    query = session.query(Station).filter_by(graph_id=graph_id)
 
     # Filter by station IDs if provided
     if station_ids and len(station_ids) > 0:
@@ -79,6 +117,8 @@ def get_many(
         query = query.filter(Station.longitude >= longitude_min)
     if longitude_max is not None:
         query = query.filter(Station.longitude <= longitude_max)
+
+    query = query.order_by(Station.id)  # order by station ID
 
     if offset:
         query = query.offset(offset)

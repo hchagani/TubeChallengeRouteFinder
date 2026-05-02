@@ -60,17 +60,54 @@ def db_resource(db_session: Session) -> Callable:
 
 
 @pytest.fixture
-def db_graph(db_resource: Callable) -> Graph:
-    """Create database record in the database."""
-    return db_resource([{}], Graph)[0]
+def generate_graph_infos() -> Callable:
+    def _generate_graph_infos(n_graphs: int = 1) -> list[dict]:
+        """Generate data for graph records.
+
+        Args:
+            n_graphs (int): number of graph records.
+
+        Returns:
+            list of data required to create graph records.
+        """
+        graph_infos = []
+        for idx in range(n_graphs):
+            graph_infos.append({"name": f"Test Graph {idx}"})  # Increment name
+
+        return graph_infos
+
+    return _generate_graph_infos
+
+
+@pytest.fixture
+def db_graphs(
+    generate_graph_infos: Callable, db_resource: Callable
+) -> Callable:
+    def _db_graphs(n_graphs: int = 1) -> list[Graph]:
+        """Create records for graphs in the database.
+
+        Args:
+            n_graphs (int): number of graph records.
+
+        Returns:
+            graph records that have been written to the database.
+        """
+        graph_infos = generate_graph_infos(n_graphs)
+
+        return db_resource(graph_infos, Graph)
+
+    return _db_graphs
 
 
 @pytest.fixture
 def generate_line_infos() -> Callable:
-    def _generate_line_infos(n_lines: int = 1) -> list[dict]:
+    def _generate_line_infos(
+        graph_ids: list[int], n_lines: int = 1
+    ) -> list[dict]:
         """Generate data for line records.
 
         Args:
+            graph_ids (list[int]): list of graph record IDs.
             n_lines (int): number of lines.
 
         Returns:
@@ -85,6 +122,7 @@ def generate_line_infos() -> Callable:
                     "line_id": str(uuid4())[:MAX_LINE_ID_LENGTH],
                     "name": f"Test Line {idx}",
                     "mode": random.choice(valid_modes),
+                    "graph_id": random.choice(graph_ids),
                 }
             )
 
@@ -95,16 +133,17 @@ def generate_line_infos() -> Callable:
 
 @pytest.fixture
 def db_lines(generate_line_infos: Callable, db_resource: Callable) -> Callable:
-    def _db_lines(n_lines: int = 1) -> list[Line]:
+    def _db_lines(graph_ids: list[int], n_lines: int = 1) -> list[Line]:
         """Create records for lines in the database.
 
         Args:
+            graph_ids (list[int]): list of graph record IDs.
             n_lines (int): number of lines.
 
         Returns:
             line records that have been written to the database.
         """
-        line_infos = generate_line_infos(n_lines)
+        line_infos = generate_line_infos(graph_ids, n_lines)
 
         return db_resource(line_infos, Line)
 
@@ -113,10 +152,13 @@ def db_lines(generate_line_infos: Callable, db_resource: Callable) -> Callable:
 
 @pytest.fixture
 def generate_station_infos() -> Callable:
-    def _generate_station_infos(n_stations: int = 1) -> list[dict]:
+    def _generate_station_infos(
+        graph_ids: list[int], n_stations: int = 1
+    ) -> list[dict]:
         """Generate data for station records.
 
         Args:
+            graph_ids (list[int]): list of graph record IDs.
             n_stations (int): number of stations.
 
         Returns:
@@ -133,6 +175,7 @@ def generate_station_infos() -> Callable:
                     "zone": str(random.randint(1, 7)),
                     "latitude": 51.5074 + random.random() - 0.5,
                     "longitude": -0.1272 + random.random() - 0.5,
+                    "graph_id": random.choice(graph_ids),
                 }
             )
 
@@ -145,16 +188,19 @@ def generate_station_infos() -> Callable:
 def db_stations(
     generate_station_infos: Callable, db_resource: Callable
 ) -> Callable:
-    def _db_stations(n_stations: int = 1) -> list[Station]:
+    def _db_stations(
+        graph_ids: list[int], n_stations: int = 1
+    ) -> list[Station]:
         """Create records for stations in the database.
 
         Args:
+            graph_ids (list[int]): list of graph record IDs.
             n_stations (int): number of stations.
 
         Returns:
             station records that have been written to the database.
         """
-        station_infos = generate_station_infos(n_stations)
+        station_infos = generate_station_infos(graph_ids, n_stations)
 
         return db_resource(station_infos, Station)
 

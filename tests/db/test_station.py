@@ -8,16 +8,19 @@ from sqlalchemy.orm import Session
 
 from tubechallenge.db import station
 from tubechallenge.db.constants import MAX_STATION_ID_LENGTH
-from tubechallenge.db.tables import Station
+from tubechallenge.db.tables import Graph, Station
 
 
 def test_create_station(
+    db_graphs: Callable,
     generate_station_infos: Callable,
     db_session: Session,
     caplog: pytest.LogCaptureFixture,
 ):
     """Test: Create a station record in the database."""
-    station_infos = generate_station_infos()
+    new_graph = db_graphs()[0]  # create graph that station will belong to
+
+    station_infos = generate_station_infos(graph_ids=[new_graph.id])
 
     with caplog.at_level(logging.INFO):
         new_station = station.create(station_infos, db_session)
@@ -31,9 +34,16 @@ def test_create_station(
     assert new_station[0].latitude == station_infos[0]["latitude"]
     assert new_station[0].longitude == station_infos[0]["longitude"]
     assert new_station[0].is_open == True  # default value
+    assert new_station[0].graph_id == new_graph.id
+
+    # Check graph is associated with station
+    db_graph = db_session.get(Graph, new_graph.id)
+    assert len(db_graph.stations) == 1
+    assert db_graph.stations[0].id == new_station[0].id
 
 
 def test_create_station__station_id_is_too_long(
+    db_graphs: Callable,
     generate_station_infos: Callable,
     get_invalid_resource_id: Callable,
     db_session: Session,
@@ -42,7 +52,9 @@ def test_create_station__station_id_is_too_long(
     """Test: Create a station record in the database with a station ID that
     exceeds the maximum length. Logs an error and returns None.
     """
-    station_infos = generate_station_infos()
+    new_graph = db_graphs()[0]  # create graph that station will belong to
+
+    station_infos = generate_station_infos(graph_ids=[new_graph.id])
     station_infos[0]["station_id"] = get_invalid_resource_id(
         MAX_STATION_ID_LENGTH
     )
@@ -54,11 +66,34 @@ def test_create_station__station_id_is_too_long(
     assert new_station is None
 
 
-def test_get_station(db_stations: Callable, db_session: Session):
-    """Test: Get a single station record from the database."""
-    db_rec = db_stations()[0]
+def test_create_station__graph_does_not_exist(
+    generate_station_infos: Callable,
+    db_session: Session,
+    caplog: pytest.LogCaptureFixture,
+):
+    """Test: Create a station record in the database with a graph ID that does
+    not exist.
+    """
+    station_info = generate_station_infos(graph_ids=[1])
 
-    station_rec = station.get_one(db_rec.station_id, db_session)
+    with caplog.at_level(logging.ERROR):
+        new_station = station.create(station_info, db_session)
+    assert "Invalid graph ID" in caplog.records[0].message
+
+    assert new_station is None
+
+
+def test_get_station(
+    db_graphs: Callable, db_stations: Callable, db_session: Session
+):
+    """Test: Get a single station record from the database."""
+    db_graph = db_graphs()[0]  # create graph that station will belong to
+
+    db_rec = db_stations(graph_ids=[db_graph.id])[0]
+
+    station_rec = station.get_one(
+        station_id=db_rec.station_id, graph_id=db_graph.id, session=db_session
+    )
 
     assert station_rec.id == db_rec.id
     assert station_rec.station_id == db_rec.station_id
@@ -66,14 +101,21 @@ def test_get_station(db_stations: Callable, db_session: Session):
     assert station_rec.latitude == db_rec.latitude
     assert station_rec.longitude == db_rec.longitude
     assert station_rec.is_open == db_rec.is_open
+    assert station_rec.graph_id == db_graph.id
 
 
-def test_get_stations(db_stations: Callable, db_session: Session):
+def test_get_stations(
+    db_graphs: Callable, db_stations: Callable, db_session: Session
+):
     """Test: Get multiple station records from the database."""
-    n_stations = 4
-    db_recs = db_stations(n_stations)
+    db_graph = db_graphs()[0]  # create graph that station will belong to
 
-    station_recs = station.get_many(db_session)
+    n_stations = 4
+    db_recs = db_stations(graph_ids=[db_graph.id], n_stations=n_stations)
+    db_recs = sorted(db_recs, key=lambda sttn: sttn.id)
+
+    station_recs = station.get_many(graph_id=db_graph.id, session=db_session)
+    station_recs = sorted(station_recs, key=lambda sttn: sttn.id)
 
     assert isinstance(station_recs, list)
     assert len(station_recs) == n_stations
@@ -84,22 +126,25 @@ def test_get_stations(db_stations: Callable, db_session: Session):
         assert station_rec.latitude == db_rec.latitude
         assert station_rec.longitude == db_rec.longitude
         assert station_rec.is_open == db_rec.is_open
+        assert station_rec.graph_id == db_graph.id
 
 
 def test_get_stations__with_limit_and_offset(
-    db_stations: Callable, db_session: Session
+    db_graphs: Callable, db_stations: Callable, db_session: Session
 ):
     """Test: Get a certain number of records (limit) from the database after a
     particular record (offset).
     """
+    db_graph = db_graphs()[0]  # create graph that station will belong to
     n_stations = 6
-    db_recs = db_stations(n_stations)
+    db_recs = db_stations(graph_ids=[db_graph.id], n_stations=n_stations)
+    db_recs = sorted(db_recs, key=lambda sttn: sttn.id)
 
     limit = 3
     offset = 2
     station_recs = station.get_many(
-        limit=limit, offset=offset, session=db_session
-    )
+        graph_id=db_graph.id, limit=limit, offset=offset, session=db_session
+    )  # this should return sorted by station ID
 
     assert isinstance(station_recs, list)
     assert len(station_recs) == limit
@@ -112,24 +157,29 @@ def test_get_stations__with_limit_and_offset(
         assert station_rec.latitude == db_rec.latitude
         assert station_rec.longitude == db_rec.longitude
         assert station_rec.is_open == db_rec.is_open
+        assert station_rec.graph_id == db_rec.graph_id
 
 
 def test_get_stations__from_station_list(
-    db_stations: Callable, db_session: Session
+    db_graphs: Callable, db_stations: Callable, db_session: Session
 ):
     """Test: Get multiple station records from the database that correspond to
     station IDs in a list.
     """
+    db_graph = db_graphs()[0]  # create graph that station will belong to
     n_stations = 12
     n_selected_stations = random.randint(2, n_stations - 1)
 
-    db_recs = db_stations(n_stations)
+    db_recs = db_stations(graph_ids=[db_graph.id], n_stations=n_stations)
+    db_recs = sorted(db_recs, key=lambda sttn: sttn.id)
 
     station_ids = [rec.station_id for rec in db_recs]
     selected_station_ids = random.sample(station_ids, n_selected_stations)
 
     station_recs = station.get_many(
-        station_ids=selected_station_ids, session=db_session
+        graph_id=db_graph.id,
+        station_ids=selected_station_ids,
+        session=db_session,
     )
 
     assert isinstance(station_recs, list)

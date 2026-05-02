@@ -32,7 +32,7 @@ def create_graph(
             response.status_code = status.HTTP_409_CONFLICT
             result["message"] = "Database build already in progress."
         else:
-            background_tasks.add_task(fill_db)
+            background_tasks.add_task(fill_db, result["graph_id"])
             response.status_code = status.HTTP_202_ACCEPTED
             result["message"] = "Database build started."
     else:
@@ -45,9 +45,17 @@ def create_graph(
 
 
 @router.get("/graph")
-def get_graph(response: Response, session: Session = Depends(get_session)):
+def get_graph(
+    response: Response,
+    session: Session = Depends(get_session),
+    graph_id: int | None = None,
+):
     """Get database record from database."""
-    db_graph = graph.get_one(session=session)
+    if graph_id is not None:
+        db_graph = graph.get_one(graph_id=graph_id, session=session)
+    else:  # get first record
+        db_graph = graph.get_many(session=session, limit=1)
+        db_graph = db_graph[0] if db_graph else None
 
     if not db_graph:
         response.status_code = status.HTTP_404_NOT_FOUND

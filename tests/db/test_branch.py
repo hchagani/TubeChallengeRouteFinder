@@ -7,18 +7,22 @@ from sqlalchemy.orm import Session
 
 from tubechallenge.db import branch
 from tubechallenge.db.enums import BranchDirection
-from tubechallenge.db.tables import Branch, BranchStation, Line, Station
+from tubechallenge.db.tables import Branch, BranchStation, Graph, Line, Station
 
 
 @pytest.fixture
 def generate_branch_infos() -> Callable:
     def _generate_branch_infos(
-            line_ids: list[int], stations: list[Station], n_branches: int = 1
+            graph_id: int,
+            line_ids: list[int],
+            stations: list[Station],
+            n_branches: int = 1,
     ) -> list[dict]:
         """Generate data for branch records. Line IDs assigned randomly to
         branches.
 
         Args:
+            graph_id (int): ID for graph record.
             line_ids (list[int]): list of line IDs to associate with branches.
             stations (list[Station]): list of stations to associate with
               branches.
@@ -48,6 +52,7 @@ def generate_branch_infos() -> Callable:
                             direction.value for direction in BranchDirection
                         ]
                     ),
+                    "graph_id": graph_id,
                 }
             )
 
@@ -58,18 +63,20 @@ def generate_branch_infos() -> Callable:
 
 @pytest.fixture
 def db_branches(
-    generate_branch_infos: Callable,
-    db_stations: list[Station],
-    db_resource: Callable,
+    generate_branch_infos: Callable, db_resource: Callable
 ) -> Callable:
     def _db_branches(
-        line_ids: list[int], stations: list[Station], n_branches: int = 1
-    ) -> list[branch]:
+        graph_id: int,
+        line_ids: list[int],
+        stations: list[Station],
+        n_branches: int = 1,
+    ) -> list[Branch]:
         """Create records for branches in the database. Line IDs assigned
         randomly to branches.
 
         Args:
-            line_ids (list[int]): list of line ids to associate with branches.
+            graph_id (int): ID for graph record.
+            line_ids (list[int]): list of line IDs to associate with branches.
             stations (list[Station]): list of stations to associate with
               branches.
             n_branches (int): number of branches.
@@ -77,7 +84,9 @@ def db_branches(
         Returns:
             branch records that have been written to the database.
         """
-        branch_infos = generate_branch_infos(line_ids, stations, n_branches)
+        branch_infos = generate_branch_infos(
+            graph_id, line_ids, stations, n_branches
+        )
 
         # Create associations between stations and branches
         station_map = {station.station_id: station.id for station in stations}
@@ -89,6 +98,7 @@ def db_branches(
                     BranchStation(
                         station_id=station_map[station],
                         sequence=idx,
+                        graph_id=branch_info["graph_id"],
                     )
                 )
 
@@ -98,6 +108,7 @@ def db_branches(
 
 
 def test_create_branch(
+    db_graphs: Callable,
     db_lines: Callable,
     db_stations: Callable,
     generate_branch_infos: Callable,
@@ -105,13 +116,14 @@ def test_create_branch(
     caplog: pytest.LogCaptureFixture,
 ):
     """Test: Create a branch record in the database."""
-    # Create line and station records to associate with branch
-    new_line = db_lines()[0]
-    new_stations = db_stations(n_stations=6)
+    # Create graph, line and station records to associate with branch
+    new_graph = db_graphs()[0]
+    new_line = db_lines(graph_ids=[new_graph.id])[0]
+    new_stations = db_stations(graph_ids=[new_graph.id], n_stations=6)
     station_map = {station.station_id: station.id for station in new_stations}
 
     branch_infos = generate_branch_infos(
-        line_ids=[new_line.id], stations=new_stations
+        graph_id=new_graph.id, line_ids=[new_line.id], stations=new_stations
     )
 
     with caplog.at_level(logging.INFO):
@@ -124,6 +136,12 @@ def test_create_branch(
     assert new_branch[0].line_id == new_line.id
     assert new_branch[0].name == branch_infos[0]["name"]
     assert new_branch[0].direction == branch_infos[0]["direction"]
+    assert new_branch[0].graph_id == new_graph.id
+
+    # Check graph is associated with branch
+    db_graph = db_session.get(Graph, new_graph.id)
+    assert len(db_graph.branches) == 1
+    assert db_graph.branches[0].id == new_branch[0].id
 
     # Check line is associated with branch
     db_line = db_session.get(Line, new_line.id)
@@ -142,6 +160,7 @@ def test_create_branch(
 
 
 def test_create_branch__name_is_of_invalid_data_type(
+    db_graphs: Callable,
     db_lines: Callable,
     db_stations: Callable,
     generate_branch_infos: Callable,
@@ -151,13 +170,14 @@ def test_create_branch__name_is_of_invalid_data_type(
     """Test: Create a branch record in the database with an integer for a name.
     Logs an error and returns None.
     """
-    # Create line and station records to associate with branch
-    new_line = db_lines()[0]
-    new_stations = db_stations(n_stations=6)
+    # Create graph, line and station records to associate with branch
+    new_graph = db_graphs()[0]
+    new_line = db_lines(graph_ids=[new_graph.id])[0]
+    new_stations = db_stations(graph_ids=[new_graph.id], n_stations=6)
     station_map = {station.station_id: station.id for station in new_stations}
 
     branch_infos = generate_branch_infos(
-        line_ids=[new_line.id], stations=new_stations
+        graph_id=new_graph.id, line_ids=[new_line.id], stations=new_stations
     )
     branch_infos[0]["name"] = 0
 
@@ -169,6 +189,7 @@ def test_create_branch__name_is_of_invalid_data_type(
 
 
 def test_create_branch__direction_is_invalid(
+    db_graphs: Callable,
     db_lines: Callable,
     db_stations: Callable,
     generate_branch_infos: Callable,
@@ -178,13 +199,14 @@ def test_create_branch__direction_is_invalid(
     """Test: Create a branch record in the database with an invalid direction.
     Logs an error and returns None.
     """
-    # Create line and station records to associate with branch
-    new_line = db_lines()[0]
-    new_stations = db_stations(n_stations=6)
+    # Create graph, line and station records to associate with branch
+    new_graph = db_graphs()[0]
+    new_line = db_lines(graph_ids=[new_graph.id])[0]
+    new_stations = db_stations(graph_ids=[new_graph.id], n_stations=6)
     station_map = {station.station_id: station.id for station in new_stations}
 
     branch_infos = generate_branch_infos(
-        line_ids=[new_line.id], stations=new_stations
+        graph_id=new_graph.id, line_ids=[new_line.id], stations=new_stations
     )
     branch_infos[0]["direction"] = "westbound"  # inbound/outbound are valid
 
@@ -196,6 +218,7 @@ def test_create_branch__direction_is_invalid(
 
 
 def test_create_branch__line_does_not_exist(
+    db_graphs: Callable,
     db_stations: Callable,
     generate_branch_infos: Callable,
     db_session: Session,
@@ -204,13 +227,14 @@ def test_create_branch__line_does_not_exist(
     """Test: Create a branch record in the database for a line that does not
     have a record in the database. Logs an error and returns None.
     """
-    # Create station records to associate with branch
-    new_stations = db_stations(n_stations=6)
+    # Create graph and station records to associate with branch
+    new_graph = db_graphs()[0]
+    new_stations = db_stations(graph_ids=[new_graph.id], n_stations=6)
     station_map = {station.station_id: station.id for station in new_stations}
 
     missing_line_id = 1
     branch_infos = generate_branch_infos(
-        line_ids=[missing_line_id], stations=new_stations
+        graph_id=new_graph.id, line_ids=[missing_line_id], stations=new_stations
     )
 
     with caplog.at_level(logging.ERROR):
@@ -221,6 +245,7 @@ def test_create_branch__line_does_not_exist(
 
 
 def test_create_branch__station_has_no_id(
+    db_graphs: Callable,
     db_lines: Callable,
     db_stations: Callable,
     generate_branch_infos: Callable,
@@ -231,13 +256,14 @@ def test_create_branch__station_has_no_id(
     that does not have a corresponding ID in the map. Logs an error and returns
     None.
     """
-    # Create line and station records to associate with branch
-    new_line = db_lines()[0]
-    new_stations = db_stations(n_stations=6)
+    # Create graph, line and station records to associate with branch
+    new_graph = db_graphs()[0]
+    new_line = db_lines(graph_ids=[new_graph.id])[0]
+    new_stations = db_stations(graph_ids=[new_graph.id], n_stations=6)
     station_map = {station.station_id: station.id for station in new_stations}
 
     branch_infos= generate_branch_infos(
-        line_ids=[new_line.id], stations=new_stations
+        graph_id=new_graph.id, line_ids=[new_line.id], stations=new_stations
     )
     missing_station_id = "Test Station with no ID"
     branch_infos[0]["sequence"].append(missing_station_id)
@@ -250,6 +276,7 @@ def test_create_branch__station_has_no_id(
 
 
 def test_create_branch__station_does_not_exist(
+    db_graphs: Callable,
     db_lines: Callable,
     db_stations: Callable,
     generate_branch_infos: Callable,
@@ -260,15 +287,16 @@ def test_create_branch__station_does_not_exist(
     that does not have a record in the database. Logs an error and returns
     None.
     """
-    # Create line and station records to associate with branch
-    new_line = db_lines()[0]
-    new_stations = db_stations(n_stations=6)
+    # Create graph, line and station records to associate with branch
+    new_graph = db_graphs()[0]
+    new_line = db_lines(graph_ids=[new_graph.id])[0]
+    new_stations = db_stations(graph_ids=[new_graph.id], n_stations=6)
     station_map = {station.station_id: station.id for station in new_stations}
     missing_station_id = "Missing Test Station"
     station_map[missing_station_id] = len(new_stations) + 1
 
     branch_infos = generate_branch_infos(
-        line_ids=[new_line.id], stations=new_stations
+        graph_id=new_graph.id, line_ids=[new_line.id], stations=new_stations
     )
     branch_infos[0]["sequence"].append(missing_station_id)
 
@@ -280,17 +308,21 @@ def test_create_branch__station_does_not_exist(
 
 
 def test_get_branch(
+    db_graphs: Callable,
     db_lines: Callable,
     db_stations: Callable,
     db_branches: Callable,
     db_session: Session,
 ):
     """Test: Get a single branch record from the database."""
-    # Create line and station records to associate with branch
-    new_line = db_lines()[0]
-    new_stations = db_stations(n_stations=6)
+    # Create graph, line and station records to associate with branch
+    new_graph = db_graphs()[0]
+    new_line = db_lines(graph_ids=[new_graph.id])[0]
+    new_stations = db_stations(graph_ids=[new_graph.id], n_stations=6)
 
-    db_rec = db_branches(line_ids=[new_line.id], stations=new_stations)[0]
+    db_rec = db_branches(
+        graph_id=new_graph.id, line_ids=[new_line.id], stations=new_stations
+    )[0]
 
     branch_rec = branch.get_one(db_rec.id, db_session)
 
@@ -298,6 +330,7 @@ def test_get_branch(
     assert branch_rec.line_id == new_line.id
     assert branch_rec.name == db_rec.name
     assert branch_rec.direction == db_rec.direction
+    assert branch_rec.graph_id == new_graph.id
     assert len(branch_rec.branchstations) > 0
     assert len(branch_rec.branchstations) == len(db_rec.branchstations)
     assert all(
@@ -306,24 +339,31 @@ def test_get_branch(
 
 
 def test_get_branches(
+    db_graphs: Callable,
     db_lines: Callable,
     db_stations: Callable,
     db_branches: Callable,
     db_session: Session,
 ):
     """Test: Get multiple branch records from the database."""
-    # Create line and station records to associate with new branches
+    # Create graph, line and station records to associate with new branches
+    new_graph = db_graphs()[0]
     n_lines = 2
-    line_ids = [new_line.id for new_line in db_lines(n_lines)]
-    new_stations = db_stations(n_stations=12)
+    line_ids = [new_line.id for new_line in db_lines([new_graph.id], n_lines)]
+    new_stations = db_stations(graph_ids=[new_graph.id], n_stations=12)
 
     # Create new branches
     n_branches = 4
     db_recs = db_branches(
-        line_ids=line_ids, stations=new_stations, n_branches=n_branches
+        graph_id=new_graph.id,
+        line_ids=line_ids,
+        stations=new_stations,
+        n_branches=n_branches,
     )
+    db_recs = sorted(db_recs, key=lambda brnch: brnch.id)
 
-    branch_recs = branch.get_many(db_session)
+    branch_recs = branch.get_many(graph_id=new_graph.id, session=db_session)
+    branch_recs = sorted(branch_recs, key=lambda brnch: brnch.id)
 
     assert isinstance(branch_recs, list)
     assert len(branch_recs) == n_branches
@@ -332,6 +372,7 @@ def test_get_branches(
         assert branch_rec.line_id == db_rec.line_id
         assert branch_rec.name == db_rec.name
         assert branch_rec.direction == db_rec.direction
+        assert branch_rec.graph_id == new_graph.id
         assert len(branch_rec.branchstations) > 0
         assert len(branch_rec.branchstations) == len(db_rec.branchstations)
         assert all(
@@ -340,25 +381,36 @@ def test_get_branches(
 
 
 def test_get_branches__with_limit_and_offset(
-    db_lines: Callable, db_stations: Callable, db_branches: Callable, db_session: Session
+    db_graphs: Callable,
+    db_lines: Callable,
+    db_stations: Callable,
+    db_branches: Callable,
+    db_session: Session,
 ):
     """Test: Get a certain number of records (limit) from the database after a
     particular record (offset).
     """
-    # Create line and station records to associate with new branches
+    # Create graph, line and station records to associate with new branches
+    new_graph = db_graphs()[0]
     n_lines = 3
-    line_ids = [new_line.id for new_line in db_lines(n_lines)]
-    new_stations = db_stations(n_stations=18)
+    line_ids = [new_line.id for new_line in db_lines([new_graph.id], n_lines)]
+    new_stations = db_stations(graph_ids=[new_graph.id], n_stations=18)
 
     # Create new branches
     n_branches = 6
     db_recs = db_branches(
-        line_ids=line_ids, stations=new_stations, n_branches=n_branches
+        graph_id=new_graph.id,
+        line_ids=line_ids,
+        stations=new_stations,
+        n_branches=n_branches,
     )
+    db_recs = sorted(db_recs, key=lambda brnch: brnch.id)
 
     limit = 3
     offset = 2
-    branch_recs = branch.get_many(limit=limit, offset=offset, session=db_session)
+    branch_recs = branch.get_many(
+        graph_id=new_graph.id, limit=limit, offset=offset, session=db_session
+    )  # this should return sorted by branch ID
 
     assert isinstance(branch_recs, list)
     assert len(branch_recs) == limit
@@ -369,6 +421,7 @@ def test_get_branches__with_limit_and_offset(
         assert branch_rec.line_id == db_rec.line_id
         assert branch_rec.name == db_rec.name
         assert branch_rec.direction == db_rec.direction
+        assert branch_rec.graph_id == new_graph.id
         assert len(branch_rec.branchstations) > 0
         assert len(branch_rec.branchstations) == len(db_rec.branchstations)
         assert all(

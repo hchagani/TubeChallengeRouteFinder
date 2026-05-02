@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from tubechallenge.db.graph import get_many as get_graphs
 from tubechallenge.db.schemas import CreateLine
 from tubechallenge.db.tables import Line
 
@@ -11,7 +12,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
-def create(line_infos: list[dict], session: Session) -> list[Line]:
+def create(line_infos: list[dict], session: Session) -> list[Line] | None:
     """Create new line records.
 
     Args:
@@ -21,12 +22,21 @@ def create(line_infos: list[dict], session: Session) -> list[Line]:
     Returns:
         list of created line records.
     """
-    # Validation input data for lines and create records
+    graph_ids = {line_info["graph_id"] for line_info in line_infos}
+    db_graph_ids = {g.id for g in get_graphs(session, graph_ids=graph_ids)}
+
+    # Validate input data for lines and create records
     lines = []
     for line_info in line_infos:
         try:
-            CreateLine(**line_info)
+            validated_line = CreateLine(**line_info)
+
+            if validated_line.graph_id not in db_graph_ids:
+                logger.error(f"Invalid graph ID {validated_line.graph_id}")
+                return None
+
             lines.append(Line(**line_info))
+
         except ValidationError as err:
             logger.error(f"Validation failed for tube line {line_info}: {err}")
             return None
@@ -47,14 +57,39 @@ def create(line_infos: list[dict], session: Session) -> list[Line]:
     return lines
 
 
-def get_one(line_id: str, session: Session):
-    """Get line record."""
-    return session.query(Line).filter_by(line_id=line_id).first()
+def get_one(line_id: str, graph_id: int, session: Session) -> Line:
+    """Get line record related to a particular graph record.
+
+    Args:
+        line_id (str): TfL's ID of line record to retrieve.
+        graph_id (int): ID of related graph record.
+        session (Session): database session.
+
+    Returns:
+        requested line record.
+    """
+    return (
+        session.query(Line)
+        .filter_by(line_id=line_id, graph_id=graph_id)
+        .first()
+    )
 
 
-def get_many(session: Session, limit: int = 0, offset: int = 0):
-    """Get all line records."""
-    query = session.query(Line)
+def get_many(
+    graph_id: int, session: Session, limit: int = 0, offset: int = 0
+) -> list[Line]:
+    """Get all line records related to a particular graph record.
+
+    Args:
+        graph_id (int): ID of related graph record.
+        session (Session): database session.
+        limit (int): maximum number of line records to retrieve.
+        offset (int): index of first line record to retrieve.
+
+    Returns:
+        list of line records ordered by ID.
+    """
+    query = session.query(Line).filter_by(graph_id=graph_id).order_by(Line.id)
     if offset:
         query = query.offset(offset)
     if limit:

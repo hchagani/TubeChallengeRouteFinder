@@ -4,6 +4,7 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from tubechallenge.db.graph import get_many as get_graphs
 from tubechallenge.db.schemas import CreateBranch
 from tubechallenge.db.tables import Branch, BranchStation, Line, Station
 
@@ -13,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 def create(
     branch_infos: list[dict], station_map: dict, session: Session
-) -> list[Branch]:
+) -> list[Branch] | None:
     """Create a new branch record and branch_station associations.
 
     Args:
@@ -26,8 +27,16 @@ def create(
     Returns:
         list of created branch records.
     """
+    graph_ids = [branch_info["graph_id"] for branch_info in branch_infos]
+    db_graph_ids = {g.id for g in get_graphs(session, graph_ids=graph_ids)}
+
     branches = []
     for branch_info in branch_infos:
+        graph_id = branch_info.get("graph_id", None)
+        if graph_id not in db_graph_ids:
+            logger.error(f"Invalid graph ID {graph_id}")
+            return None
+
         # Extract station sequence and look up station IDs to build
         # associations for stations on branch
         station_sequence = branch_info.pop("sequence")
@@ -49,6 +58,7 @@ def create(
                 {
                     "station_id": station_map[station],
                     "sequence": sequence,
+                    "graph_id": graph_id,
                 }
             )
 
@@ -91,14 +101,36 @@ def create(
     return branches
 
 
-def get_one(branch_id: int, session: Session):
-    """Get branch record."""
+def get_one(branch_id: int, session: Session) -> Branch:
+    """Get branch record.
+
+    Args:
+        branch_id (int): ID of branch record.
+        session (Session): database session.
+
+    Returns:
+        requested branch record.
+    """
     return session.query(Branch).filter_by(id=branch_id).first()
 
 
-def get_many(session: Session, limit: int = 0, offset: int = 0):
-    """Get all branch records."""
-    query = session.query(Branch)
+def get_many(
+    graph_id: int, session: Session, limit: int = 0, offset: int = 0
+) -> list[Branch]:
+    """Get all branch records related to a particular graph record.
+
+    Args:
+        graph_id (int): ID of related graph record.
+        session (Session): database session.
+        limit (int): maximum number of line records to retrieve.
+        offset (int): index of first branch record to retrieve.
+
+    Returns:
+        list of branch records ordered by ID.
+    """
+    query = (
+        session.query(Branch).filter_by(graph_id=graph_id).order_by(Branch.id)
+    )
     if offset:
         query = query.offset(offset)
     if limit:
