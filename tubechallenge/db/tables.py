@@ -81,7 +81,6 @@ class Line(BaseModel):
         SAEnum(ModeOfTransport, name="modeoftransport", validate_strings=True),
         nullable=False,
     )
-    average_speed: Mapped[float] = mapped_column(default=0.0)
     graph_id: Mapped[int] = mapped_column(
         ForeignKey("graphs.id"), nullable=False
     )

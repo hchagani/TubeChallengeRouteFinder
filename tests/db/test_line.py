@@ -31,7 +31,6 @@ def test_create_line(
     assert new_line[0].line_id == line_info[0]["line_id"]
     assert new_line[0].name == line_info[0]["name"]
     assert new_line[0].mode == line_info[0]["mode"]
-    assert new_line[0].average_speed == 0.0  # default value
     assert new_line[0].graph_id == new_graph.id
 
     # Check graph is associated with line
@@ -95,7 +94,6 @@ def test_get_line(
     assert line_rec.line_id == db_rec.line_id
     assert line_rec.name == db_rec.name
     assert line_rec.mode == db_rec.mode
-    assert line_rec.average_speed == db_rec.average_speed
     assert line_rec.graph_id == db_graph.id
 
 
@@ -119,7 +117,6 @@ def test_get_lines(
         assert line_rec.line_id == db_rec.line_id
         assert line_rec.name == db_rec.name
         assert line_rec.mode == db_rec.mode
-        assert line_rec.average_speed == db_rec.average_speed
         assert line_rec.graph_id == db_graph.id
 
 
@@ -147,5 +144,4 @@ def test_get_lines__with_limit_and_offset(
         assert line_rec.line_id == db_rec.line_id
         assert line_rec.name == db_rec.name
         assert line_rec.mode == db_rec.mode
-        assert line_rec.average_speed == db_rec.average_speed
         assert line_rec.graph_id == db_graph.id
