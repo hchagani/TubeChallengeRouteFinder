@@ -1,6 +1,5 @@
 from datetime import datetime, timezone
 from functools import partial
-from typing import Optional
 
 from sqlalchemy import Enum as SAEnum
 from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
@@ -51,19 +50,19 @@ class Graph(BaseModel):
         nullable=False,
         default=StatusFlag.PENDING,
     )
-    lines: Mapped[Optional[list["Line"]]] = relationship(
+    lines: Mapped[list["Line"]] = relationship(
         back_populates="graph", lazy="selectin", cascade="all, delete-orphan"
     )
-    branches: Mapped[Optional[list["Branch"]]] = relationship(
+    branches: Mapped[list["Branch"]] = relationship(
         back_populates="graph", lazy="selectin", cascade="all, delete-orphan"
     )
-    stations: Mapped[Optional[list["Station"]]] = relationship(
+    stations: Mapped[list["Station"]] = relationship(
         back_populates="graph", lazy="selectin", cascade="all, delete-orphan"
     )
-    branchstations: Mapped[Optional[list["BranchStation"]]] = relationship(
+    branchstations: Mapped[list["BranchStation"]] = relationship(
         back_populates="graph", lazy="selectin", cascade="all, delete-orphan"
     )
-    connections: Mapped[Optional[list["Connection"]]] = relationship(
+    connections: Mapped[list["Connection"]] = relationship(
         back_populates="graph", lazy="selectin", cascade="all, delete-orphan"
     )
 
@@ -87,10 +86,10 @@ class Line(BaseModel):
         ForeignKey("graphs.id"), nullable=False
     )
     graph: Mapped[Graph] = relationship(back_populates="lines")
-    branches: Mapped[Optional[list["Branch"]]] = relationship(
+    branches: Mapped[list["Branch"]] = relationship(
         back_populates="line", lazy="selectin"
     )
-    connections: Mapped[Optional[list["Connection"]]] = relationship(
+    connections: Mapped[list["Connection"]] = relationship(
         back_populates="line", lazy="selectin"
     )
 
@@ -110,7 +109,7 @@ class Branch(BaseModel):
         ForeignKey("graphs.id"), nullable=False
     )
     graph: Mapped[Graph] = relationship(back_populates="branches")
-    branchstations: Mapped[Optional[list["BranchStation"]]] = relationship(
+    branchstations: Mapped[list["BranchStation"]] = relationship(
         back_populates="branch", lazy="selectin"
     )
 
@@ -134,15 +133,15 @@ class Station(BaseModel):
         ForeignKey("graphs.id"), nullable=False
     )
     graph: Mapped[Graph] = relationship(back_populates="stations")
-    branchstations: Mapped[Optional[list["BranchStation"]]] = relationship(
+    branchstations: Mapped[list["BranchStation"]] = relationship(
         back_populates="station", lazy="selectin"
     )
-    connections_from: Mapped[Optional[list["Connection"]]] = relationship(
+    connections_from: Mapped[list["Connection"]] = relationship(
         back_populates="from_station",
         foreign_keys="[Connection.from_station_id]",
         lazy="selectin",
     )
-    connections_to: Mapped[Optional[list["Connection"]]] = relationship(
+    connections_to: Mapped[list["Connection"]] = relationship(
         back_populates="to_station",
         foreign_keys="[Connection.to_station_id]",
         lazy="selectin",
