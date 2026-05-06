@@ -1,4 +1,3 @@
-from itertools import product
 import logging
 import pytest
 import random
@@ -7,98 +6,7 @@ from typing import Callable
 from sqlalchemy.orm import Session
 
 from tubechallenge.db import connection
-from tubechallenge.db.tables import Connection, Graph, Line, Station
-
-
-@pytest.fixture
-def generate_connection_infos() -> Callable:
-    def _generate_connection_infos(
-        graph_id: int,
-        line_ids: list[int],
-        station_ids: list[int],
-        n_connections: int = 1,
-    ) -> list[dict]:
-        """Generate data for records of connections between adjacent stations.
-        Randomly select combinations of originating and destination stations,
-        and lines connecting them, and assign random integer journey times.
-
-        Args:
-            graph_id (int): ID for graph record.
-            line_ids (list[int]): list of line IDs to associate with
-              connections.
-            station_ids (list[int]): list of station IDs to choose from when
-              assigning originating and destination stations.
-            n_connections (int): number of connections.
-
-        Returns:
-            list of data requried to create records of connections between
-              adjacent stations.
-        """
-        connection_infos = []
-
-        # Get all possible combinations of stations and lines
-        possible_combinations = [
-            (
-                from_station, to_station, line
-            ) for from_station, to_station, line in product(
-                station_ids, station_ids, line_ids
-            ) if from_station != to_station
-        ]
-
-        # Number of connections cannot exceed number of possible combinations
-        n_connections = min(n_connections, len(possible_combinations))
-
-        selected_combinations = random.sample(
-            possible_combinations, n_connections
-        )
-
-        for from_station_id, to_station_id, line_id in selected_combinations:
-            connection_infos.append(
-                {
-                    "graph_id": graph_id,
-                    "from_station_id": from_station_id,
-                    "to_station_id": to_station_id,
-                    "line_id": line_id,
-                    "time": random.randint(1, 8),  # randomise journey times
-                    "interval": random.randint(1, 10),  # randomise times between services
-                }
-            )
-
-        return connection_infos
-
-    return _generate_connection_infos
-
-@pytest.fixture
-def db_connections(
-    generate_connection_infos: Callable, db_resource: Callable
-) -> Callable:
-    def _db_connections(
-        graph_id: int,
-        line_ids: list[int],
-        station_ids: list[int],
-        n_connections: int = 1,
-    ) -> list[Connection]:
-        """Create records for connections between adjacent stations in the
-        database.
-
-        Args:
-            graph_id (int): ID for graph record.
-            line_ids (list[int]): list of line IDs to associate with
-              connections.
-            station_ids (list[int]): list of station IDs to associate with
-              connections.
-            n_connections (int): number of connections.
-
-        Returns:
-            connection records that have been written to the database.
-        """
-        connection_infos = generate_connection_infos(
-            graph_id, line_ids, station_ids, n_connections
-        )
-
-        return db_resource(connection_infos, Connection)
-
-    return _db_connections
+from tubechallenge.db.tables import Graph, Line, Station
 
 
 def test_create_connection(

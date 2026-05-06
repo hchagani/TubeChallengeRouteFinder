@@ -1,3 +1,4 @@
+import itertools
 import pytest
 import random
 from typing import Callable
@@ -10,8 +11,16 @@ from tubechallenge.db.constants import (
     MAX_LINE_ID_LENGTH,
     MAX_STATION_ID_LENGTH,
 )
-from tubechallenge.db.enums import ModeOfTransport
-from tubechallenge.db.tables import Base, Graph, Line, Station
+from tubechallenge.db.enums import BranchDirection, ModeOfTransport
+from tubechallenge.db.tables import (
+    Base,
+    Branch,
+    BranchStation,
+    Connection,
+    Graph,
+    Line,
+    Station,
+)
 
 
 @pytest.fixture
@@ -205,6 +214,196 @@ def db_stations(
         return db_resource(station_infos, Station)
 
     return _db_stations
+
+
+@pytest.fixture
+def generate_branch_infos() -> Callable:
+    def _generate_branch_infos(
+            graph_id: int,
+            line_ids: list[int],
+            stations: list[Station],
+            n_branches: int = 1,
+    ) -> list[dict]:
+        """Generate data for branch records. Line IDs assigned randomly to
+        branches.
+
+        Args:
+            graph_id (int): ID for graph record.
+            line_ids (list[int]): list of line IDs to associate with branches.
+            stations (list[Station]): list of stations to associate with
+              branches.
+            n_branches (int): number of branches.
+
+        Returns:
+            list of data required to create branch records.
+        """
+        branch_infos = []
+        for idx in range(n_branches):
+            # Associate random line and stations to each branch
+            line_id = random.choice(line_ids)
+            branch_stations = random.sample(
+                stations, random.randint(1, len(stations))
+            )
+
+            # Randomise branch ID and increment name
+            branch_infos.append(
+                {
+                    "line_id": line_id,
+                    "name": f"Test Branch {idx}",
+                    "sequence": [
+                        station.station_id for station in branch_stations
+                    ],
+                    "direction": random.choice(
+                        [
+                            direction.value for direction in BranchDirection
+                        ]
+                    ),
+                    "graph_id": graph_id,
+                }
+            )
+
+        return branch_infos
+
+    return _generate_branch_infos
+
+
+@pytest.fixture
+def db_branches(
+    generate_branch_infos: Callable, db_resource: Callable
+) -> Callable:
+    def _db_branches(
+        graph_id: int,
+        line_ids: list[int],
+        stations: list[Station],
+        n_branches: int = 1,
+    ) -> list[Branch]:
+        """Create records for branches in the database. Line IDs assigned
+        randomly to branches.
+
+        Args:
+            graph_id (int): ID for graph record.
+            line_ids (list[int]): list of line IDs to associate with branches.
+            stations (list[Station]): list of stations to associate with
+              branches.
+            n_branches (int): number of branches.
+
+        Returns:
+            branch records that have been written to the database.
+        """
+        branch_infos = generate_branch_infos(
+            graph_id, line_ids, stations, n_branches
+        )
+
+        # Create associations between stations and branches
+        station_map = {station.station_id: station.id for station in stations}
+        for branch_info in branch_infos:
+            sequence = branch_info.pop("sequence")
+            branch_info["branchstations"] = []
+            for idx, station in enumerate(sequence):
+                branch_info["branchstations"].append(
+                    BranchStation(
+                        station_id=station_map[station],
+                        sequence=idx,
+                        graph_id=branch_info["graph_id"],
+                    )
+                )
+
+        return db_resource(branch_infos, Branch)
+
+    return _db_branches
+
+
+@pytest.fixture
+def generate_connection_infos() -> Callable:
+    def _generate_connection_infos(
+        graph_id: int,
+        line_ids: list[int],
+        station_ids: list[int],
+        n_connections: int = 1,
+    ) -> list[dict]:
+        """Generate data for records of connections between adjacent stations.
+        Randomly select combinations of originating and destination stations,
+        and lines connecting them, and assign random integer journey times.
+
+        Args:
+            graph_id (int): ID for graph record.
+            line_ids (list[int]): list of line IDs to associate with
+              connections.
+            station_ids (list[int]): list of station IDs to choose from when
+              assigning originating and destination stations.
+            n_connections (int): number of connections.
+
+        Returns:
+            list of data requried to create records of connections between
+              adjacent stations.
+        """
+        connection_infos = []
+
+        # Get all possible combinations of stations and lines
+        possible_combinations = [
+            (
+                from_station, to_station, line
+            ) for from_station, to_station, line in itertools.product(
+                station_ids, station_ids, line_ids
+            ) if from_station != to_station
+        ]
+
+        # Number of connections cannot exceed number of possible combinations
+        n_connections = min(n_connections, len(possible_combinations))
+
+        selected_combinations = random.sample(
+            possible_combinations, n_connections
+        )
+
+        for from_station_id, to_station_id, line_id in selected_combinations:
+            connection_infos.append(
+                {
+                    "graph_id": graph_id,
+                    "from_station_id": from_station_id,
+                    "to_station_id": to_station_id,
+                    "line_id": line_id,
+                    "time": random.randint(1, 8),  # randomise journey times
+                    "interval": random.randint(1, 10),  # randomise times between services
+                }
+            )
+
+        return connection_infos
+
+    return _generate_connection_infos
+
+
+@pytest.fixture
+def db_connections(
+    generate_connection_infos: Callable, db_resource: Callable
+) -> Callable:
+    def _db_connections(
+        graph_id: int,
+        line_ids: list[int],
+        station_ids: list[int],
+        n_connections: int = 1,
+    ) -> list[Connection]:
+        """Create records for connections between adjacent stations in the
+        database.
+
+        Args:
+            graph_id (int): ID for graph record.
+            line_ids (list[int]): list of line IDs to associate with
+              connections.
+            station_ids (list[int]): list of station IDs to associate with
+              connections.
+            n_connections (int): number of connections.
+
+        Returns:
+            connection records that have been written to the database.
+        """
+        connection_infos = generate_connection_infos(
+            graph_id, line_ids, station_ids, n_connections
+        )
+
+        return db_resource(connection_infos, Connection)
+
+    return _db_connections
+
 
 
 @pytest.fixture

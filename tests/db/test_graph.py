@@ -7,7 +7,14 @@ from sqlalchemy.orm import Session
 
 from tubechallenge.db import graph
 from tubechallenge.db.enums import StatusFlag
-from tubechallenge.db.tables import Graph, Station
+from tubechallenge.db.tables import (
+    Branch,
+    BranchStation,
+    Connection,
+    Graph,
+    Line,
+    Station,
+)
 
 
 def test_create_graph(db_session: Session, caplog: pytest.LogCaptureFixture):
@@ -264,6 +271,9 @@ def test_update_graph__name_is_of_invalid_data_type(
 def test_update_graph__nothing_to_update_should_not_write_to_database(
     db_graphs: Callable, db_session: Session, caplog: pytest.LogCaptureFixture
 ):
+    """Test: Attempt to update graph with empty dictionary. Should not update
+    record.
+    """
     db_graph = db_graphs()[0]
     original_date_created = db_graph.date_created
     original_last_updated = db_graph.last_updated
@@ -294,6 +304,8 @@ def test_update_graph__nothing_to_update_should_not_write_to_database(
 def test_delete_graph(
     db_graphs: Callable, db_session: Session, caplog: pytest.LogCaptureFixture
 ):
+    """Test: Delete graph record from database. Check correct record is
+    removed."""
     n_graphs = 3
     db_recs = db_graphs(n_graphs=n_graphs)
     db_del = random.choice(db_recs)  # randomly select record to delete
@@ -315,9 +327,66 @@ def test_delete_graph(
         assert graph_rec.status == db_rec.status
 
 
+def test_delete_graph__all_associated_tables_are_removed(
+    db_graphs: Callable,
+    db_lines: Callable,
+    db_stations: Callable,
+    db_branches: Callable,
+    db_connections: Callable,
+    db_session: Session
+):
+    """Test: Delete graph record from database. Check that all related records
+    are removed.
+    """
+    # Build database and associate lines, stations, branches and connections
+    # with new graph
+    new_graph = db_graphs()[0]
+    n_lines = 3
+    new_lines = db_lines(graph_ids=[new_graph.id], n_lines=n_lines)
+    line_ids = [ln.id for ln in new_lines]
+    n_stations = 12
+    new_stations = db_stations(graph_ids=[new_graph.id], n_stations=n_stations)
+    station_ids = [sttn.id for sttn in new_stations]
+    n_branches = 4
+    new_branches = db_branches(
+        graph_id=new_graph.id,
+        line_ids=line_ids,
+        stations=new_stations,
+        n_branches=n_branches,
+    )
+    n_connections = 16
+    new_connections = db_connections(
+        graph_id=new_graph.id,
+        line_ids=line_ids,
+        station_ids=station_ids,
+        n_connections=n_connections,
+    )
+
+    assert db_session.query(Graph).count() == 1
+    assert db_session.query(Line).count() == n_lines
+    assert db_session.query(Station).count() == n_stations
+    assert db_session.query(Branch).count() == n_branches
+    n_branchstations = db_session.query(BranchStation).count()
+    assert n_branchstations > 0
+    assert db_session.query(Connection).count() == n_connections
+
+    result = graph.delete(graph_id=new_graph.id, session=db_session)
+    assert result is True
+
+    assert db_session.query(Graph).count() == 0
+    assert db_session.query(Line).count() == 0
+    assert db_session.query(Station).count() == 0
+    assert db_session.query(Branch).count() == 0
+    assert db_session.query(BranchStation).count() == 0
+    assert db_session.query(Connection).count() == 0
+
+
 def test_delete_graph__graph_does_not_exist(
     db_session: Session, caplog: pytest.LogCaptureFixture
 ):
+    """Test: Attempt to delete graph record that does not exist. Should return
+    and informative message.
+    """
     with caplog.at_level(logging.INFO):
         result = graph.delete(graph_id=1, session=db_session)
 

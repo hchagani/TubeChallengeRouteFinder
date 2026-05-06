@@ -1,110 +1,11 @@
 import logging
 import pytest
-import random
 from typing import Callable
 
 from sqlalchemy.orm import Session
 
 from tubechallenge.db import branch
-from tubechallenge.db.enums import BranchDirection
-from tubechallenge.db.tables import Branch, BranchStation, Graph, Line, Station
-
-
-@pytest.fixture
-def generate_branch_infos() -> Callable:
-    def _generate_branch_infos(
-            graph_id: int,
-            line_ids: list[int],
-            stations: list[Station],
-            n_branches: int = 1,
-    ) -> list[dict]:
-        """Generate data for branch records. Line IDs assigned randomly to
-        branches.
-
-        Args:
-            graph_id (int): ID for graph record.
-            line_ids (list[int]): list of line IDs to associate with branches.
-            stations (list[Station]): list of stations to associate with
-              branches.
-            n_branches (int): number of branches.
-
-        Returns:
-            list of data required to create branch records.
-        """
-        branch_infos = []
-        for idx in range(n_branches):
-            # Associate random line and stations to each branch
-            line_id = random.choice(line_ids)
-            branch_stations = random.sample(
-                stations, random.randint(1, len(stations))
-            )
-
-            # Randomise branch ID and increment name
-            branch_infos.append(
-                {
-                    "line_id": line_id,
-                    "name": f"Test Branch {idx}",
-                    "sequence": [
-                        station.station_id for station in branch_stations
-                    ],
-                    "direction": random.choice(
-                        [
-                            direction.value for direction in BranchDirection
-                        ]
-                    ),
-                    "graph_id": graph_id,
-                }
-            )
-
-        return branch_infos
-
-    return _generate_branch_infos
-
-
-@pytest.fixture
-def db_branches(
-    generate_branch_infos: Callable, db_resource: Callable
-) -> Callable:
-    def _db_branches(
-        graph_id: int,
-        line_ids: list[int],
-        stations: list[Station],
-        n_branches: int = 1,
-    ) -> list[Branch]:
-        """Create records for branches in the database. Line IDs assigned
-        randomly to branches.
-
-        Args:
-            graph_id (int): ID for graph record.
-            line_ids (list[int]): list of line IDs to associate with branches.
-            stations (list[Station]): list of stations to associate with
-              branches.
-            n_branches (int): number of branches.
-
-        Returns:
-            branch records that have been written to the database.
-        """
-        branch_infos = generate_branch_infos(
-            graph_id, line_ids, stations, n_branches
-        )
-
-        # Create associations between stations and branches
-        station_map = {station.station_id: station.id for station in stations}
-        for branch_info in branch_infos:
-            sequence = branch_info.pop("sequence")
-            branch_info["branchstations"] = []
-            for idx, station in enumerate(sequence):
-                branch_info["branchstations"].append(
-                    BranchStation(
-                        station_id=station_map[station],
-                        sequence=idx,
-                        graph_id=branch_info["graph_id"],
-                    )
-                )
-
-        return db_resource(branch_infos, Branch)
-
-    return _db_branches
+from tubechallenge.db.tables import BranchStation, Graph, Line
 
 
 def test_create_branch(
