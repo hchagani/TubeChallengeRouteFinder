@@ -9,9 +9,10 @@ class BranchDirection(str, Enum):
 
 
 class StatusFlag(str, Enum):
-    """Status of construction."""
+    """Status of job."""
 
     PENDING = "pending"
+    RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
 

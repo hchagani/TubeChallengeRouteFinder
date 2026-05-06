@@ -34,6 +34,13 @@ def fill_db(graph_id: int):
             if db_graph.status == enums.StatusFlag.COMPLETED:
                 return
 
+        # Commence filling database
+        graph.update(
+            graph_id=graph_id,
+            graph_info={"status": enums.StatusFlag.RUNNING},
+            session=session,
+        )
+
         # Tube lines
         line_infos = get_tube_lines(graph_id)
         new_lines = line.create(line_infos=line_infos, session=session)
