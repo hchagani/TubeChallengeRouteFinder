@@ -115,10 +115,10 @@ def get_many(
 
 
 def update(graph_id: int, graph_info: dict, session: Session) -> dict | None:
-    """Update status of graph record. This status reflects whether database
-    setup has been completed or has failed.
+    """Update graph record.
 
     Args:
+        graph_id (int): ID of graph record to update.
         graph_info (dict): data to update graph record.
         session (Session): database session.
 
