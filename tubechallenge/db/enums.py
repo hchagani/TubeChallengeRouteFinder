@@ -8,6 +8,11 @@ class BranchDirection(str, Enum):
     OUTBOUND = "outbound"
 
 
+class JobType(str, Enum):
+    ROUTE_GENERATION = "route_generation"
+    FIND_SOLUTION = "find_solution"
+
+
 class StatusFlag(str, Enum):
     """Status of job."""
 

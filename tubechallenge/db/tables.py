@@ -2,7 +2,8 @@ from datetime import datetime, timezone
 from functools import partial
 
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import Index, UniqueConstraint
 from sqlalchemy.engine.default import DefaultExecutionContext
 from sqlalchemy.orm import declarative_base, mapped_column, relationship, Mapped
 
@@ -10,7 +11,12 @@ from tubechallenge.db.constants import (
     MAX_LINE_ID_LENGTH,
     MAX_STATION_ID_LENGTH,
 )
-from tubechallenge.db.enums import BranchDirection, ModeOfTransport, StatusFlag
+from tubechallenge.db.enums import (
+    BranchDirection,
+    JobType,
+    ModeOfTransport,
+    StatusFlag,
+)
 
 Base = declarative_base()
 
@@ -65,6 +71,19 @@ class Graph(BaseModel):
     connections: Mapped[list["Connection"]] = relationship(
         back_populates="graph", lazy="selectin", cascade="all, delete-orphan"
     )
+    jobs: Mapped[list["Job"]] = relationship(
+        back_populates="graph", lazy="select", cascade="all, delete-orphan"
+    )
+    station_pairs: Mapped[list["StationPair"]] = relationship(
+        back_populates="graph", lazy="selectin", cascade="all, delete-orphan"
+    )
+    routes: Mapped[list["Route"]] = relationship(
+        back_populates="graph", lazy="selectin", cascade="all, delete-orphan"
+    )
+    segments: Mapped[list["RouteSegment"]] = relationship(
+        back_populates="graph", lazy="selectin", cascade="all, delete-orphan"
+    )
+
 
 class Line(BaseModel):
     """Database model for tube lines."""
@@ -89,6 +108,9 @@ class Line(BaseModel):
         back_populates="line", lazy="selectin"
     )
     connections: Mapped[list["Connection"]] = relationship(
+        back_populates="line", lazy="selectin"
+    )
+    segments: Mapped[list["RouteSegment"]] = relationship(
         back_populates="line", lazy="selectin"
     )
 
@@ -145,6 +167,19 @@ class Station(BaseModel):
         foreign_keys="[Connection.to_station_id]",
         lazy="selectin",
     )
+    route_origins: Mapped[list["StationPair"]] = relationship(
+        back_populates="origin_station",
+        foreign_keys="[StationPair.origin_station_id]",
+        lazy="selectin",
+    )
+    route_destinations: Mapped[list["StationPair"]] = relationship(
+        back_populates="destination_station",
+        foreign_keys="[StationPair.destination_station_id]",
+        lazy="selectin",
+    )
+    segments: Mapped[list["RouteSegment"]] = relationship(
+        back_populates="station", lazy="selectin"
+    )
 
 
 class BranchStation(BaseModel):
@@ -196,3 +231,105 @@ class Connection(Base):
         foreign_keys=[to_station_id],
     )
     line: Mapped[Line] = relationship(back_populates="connections")
+
+
+class Job(BaseModel):
+    """Database model for background jobs."""
+    __tablename__ = "jobs"
+
+    job_type: Mapped[JobType] = mapped_column(SAEnum(
+        StatusFlag, name="job_type"), nullable=False
+    )
+    status: Mapped[StatusFlag] = mapped_column(
+        SAEnum(StatusFlag, name="job_status"),
+        nullable=False,
+        default=StatusFlag.PENDING,
+    )
+    progress: Mapped[float] = mapped_column(default=0.0)  # [0.0, 1.0]
+    error_message: Mapped[str] = mapped_column(nullable=True)
+    graph_id: Mapped[int] = mapped_column(
+        ForeignKey("graphs.id"), nullable=False
+    )
+    graph: Mapped[Graph] = relationship(back_populates="jobs")
+
+
+class StationPair(BaseModel):
+    """Database model for station-station pairings."""
+    __tablename__ = "station_pairs"
+    __table_args__ = (
+        UniqueConstraint(
+            "origin_station_id",
+            "destination_station_id",
+            name="uq_origin_destination",
+        ),
+        Index(
+            "idx_origin_destination",
+            "origin_station_id",
+            "destination_station_id",
+        ),
+    )
+
+    origin_station_id: Mapped[int] = mapped_column(
+        ForeignKey("stations.id", ondelete="CASCADE")
+    )
+    destination_station_id: Mapped[int] = mapped_column(
+        ForeignKey("stations.id", ondelete="CASCADE")
+    )
+    graph_id: Mapped[int] = mapped_column(
+        ForeignKey("graphs.id"), nullable=False
+    )
+    graph: Mapped[Graph] = relationship(back_populates="station_pairs")
+    origin_station: Mapped[Station] = relationship(
+        back_populates="route_origins", foreign_keys=[origin_station_id]
+    )
+    destination_station: Mapped[Station] = relationship(
+        back_populates="route_destinations",
+        foreign_keys=[destination_station_id],
+    )
+    routes: Mapped[list["Route"]] = relationship(
+        back_populates="station_pair", lazy="selectin"
+    )
+
+
+class Route(BaseModel):
+    """Database model for possible routes between station pairs."""
+    __tablename__ = "routes"
+
+    station_pair_id: Mapped[int] = mapped_column(
+        ForeignKey("station_pairs.id"), nullable=False
+    )
+    duration: Mapped[float]  # total journey time
+    tube_short: Mapped[bool]  # route starts with tube train
+    tube_end: Mapped[bool]  # route ends with tube train
+    graph_id: Mapped[int] = mapped_column(
+        ForeignKey("graphs.id"), nullable=False
+    )
+    graph: Mapped[Graph] = relationship(back_populates="routes")
+    station_pair: Mapped[StationPair] = relationship(back_populates="routes")
+    segments: Mapped[list["RouteSegment"]] = relationship(
+        back_populates="route", lazy="selectin"
+    )
+
+
+class RouteSegment(BaseModel):
+    """Database model for segments to recreate routes."""
+    __tablename__ = "route_segments"
+
+    route_id: Mapped[int] = mapped_column(
+        ForeignKey("routes.id"), nullable=False
+    )
+    station_id: Mapped[int] = mapped_column(
+        ForeignKey("stations.id"), nullable=False
+    )
+    line_id: Mapped[int] = mapped_column(
+        ForeignKey("lines.id"), nullable=False
+    )
+    cumulative_time: Mapped[float]  # journey time up and including this segment
+    sequence: Mapped[int]
+    graph_id: Mapped[int] = mapped_column(
+        ForeignKey("graphs.id"), nullable=False
+    )
+    graph: Mapped[Graph] = relationship(back_populates="segments")
+    route: Mapped[Route] = relationship(back_populates="segments")
+    station: Mapped[Station] = relationship(back_populates="segments")
+    line: Mapped[Line] = relationship(back_populates="segments")
