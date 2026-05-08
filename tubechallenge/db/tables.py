@@ -237,8 +237,8 @@ class Job(BaseModel):
     """Database model for background jobs."""
     __tablename__ = "jobs"
 
-    job_type: Mapped[JobType] = mapped_column(SAEnum(
-        StatusFlag, name="job_type"), nullable=False
+    job_type: Mapped[JobType] = mapped_column(
+        SAEnum(JobType, name="job_type"), nullable=False
     )
     status: Mapped[StatusFlag] = mapped_column(
         SAEnum(StatusFlag, name="job_status"),

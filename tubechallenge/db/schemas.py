@@ -2,7 +2,12 @@ from pydantic import BaseModel, constr
 from typing import Optional
 
 from tubechallenge.db.constants import MAX_LINE_ID_LENGTH, MAX_STATION_ID_LENGTH
-from tubechallenge.db.enums import BranchDirection, ModeOfTransport, StatusFlag
+from tubechallenge.db.enums import (
+    BranchDirection,
+    JobType,
+    ModeOfTransport,
+    StatusFlag,
+)
 
 
 class CreateBranchStation(BaseModel):
@@ -28,6 +33,11 @@ class CreateConnection(BaseModel):
     interval: int
 
 
+class CreateJob(BaseModel):
+    job_type: JobType
+    graph_id: int
+
+
 class CreateLine(BaseModel):
     line_id: constr(max_length=MAX_LINE_ID_LENGTH)
     name: str
@@ -47,3 +57,9 @@ class CreateStation(BaseModel):
 class UpdateGraph(BaseModel):
     name: Optional[str] = None
     status: Optional[StatusFlag] = None
+
+
+class UpdateJob(BaseModel):
+    status: Optional[StatusFlag] = None
+    progress: Optional[float] = None
+    error_message: Optional[str] = None
