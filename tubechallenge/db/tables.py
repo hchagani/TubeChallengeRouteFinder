@@ -5,6 +5,7 @@ from sqlalchemy import Enum as SAEnum
 from sqlalchemy import DateTime, ForeignKey, Integer, String
 from sqlalchemy import Index, UniqueConstraint
 from sqlalchemy.engine.default import DefaultExecutionContext
+from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import declarative_base, mapped_column, relationship, Mapped
 
 from tubechallenge.db.constants import (
@@ -42,6 +43,23 @@ class BaseModel(Base):
         default=get_date_created,
         onupdate=partial(datetime.now, tz=timezone.utc),
     )
+
+    def to_dict(self) -> dict:
+        """Convert model columns to dictionary. Excludes relationships."""
+        result = {}
+        for column in inspect(self).mapper.column_attrs:
+            value = getattr(self, column.key)
+
+            # Serialise enum and datetime objects
+            if isinstance(value, SAEnum):
+                value = value.value
+
+            if isinstance(value, datetime):
+                value = value.isoformat()
+
+            result[column.key] = value
+
+        return result
 
 
 class Graph(BaseModel):
