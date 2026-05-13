@@ -73,6 +73,7 @@ def reconstruct_path(
 
 
 def get_surrounding_stations(
+    graph_id: int,
     stations_by_id: dict[int, Station],
     latitude: float,
     longitude: float,
@@ -83,6 +84,7 @@ def get_surrounding_stations(
     bounding box.
 
     Args:
+        graph_id (int): ID of graph record that stations belong to.
         stations_by_id (dict[int, Station]): map of station database IDs to
           station records.
         latitude (float): latitude coordinate of centre of bounding box.
@@ -97,6 +99,7 @@ def get_surrounding_stations(
         latitude, longitude, bb_side
     )
     stations = station.get_many(
+        graph_id=graph_id,
         latitude_min=lat_min,
         latitude_max=lat_max,
         longitude_min=lon_min,
@@ -112,6 +115,7 @@ def get_surrounding_stations(
 
 
 def get_stations(
+    graph_id: int,
     station_ids: list[int],
     stations_by_id: dict[int, Station],
     session: Session,
@@ -120,6 +124,7 @@ def get_stations(
     database lookups.
 
     Args:
+        graph_id (int): ID of graph record that stations belong to.
         station_ids (list[int]): database IDs for stations of interest.
         stations_by_id (dict[int, Station]): map of station database IDs to
           station database records.
@@ -130,11 +135,12 @@ def get_stations(
     """
     stations_by_id = {}
     for station_id in station_ids:
-        station = session.get(Station, station_id)
+        db_station = session.get(Station, station_id)
         stations_by_id = get_surrounding_stations(
+            graph_id=graph_id,
             stations_by_id=stations_by_id,
-            latitude=station.latitude,
-            longitude=station.longitude,
+            latitude=db_station.latitude,
+            longitude=db_station.longitude,
             session=session,
         )
 
@@ -153,11 +159,12 @@ def is_tube(line_id: int | None) -> bool:
     return line_id is not None and line_id < 12
 
 
-def astar(origin_id: int, destination_id: int):
+def astar(graph_id: int, origin_id: int, destination_id: int):
     """Implement A* pathfinding algorithm to find shortest path between
     stations.
 
     Args:
+        graph_id (int): ID for graph record that stations belong to.
         origin_id (int): origin station database ID.
         destination_id (int): destination station database ID.
     """
@@ -168,6 +175,7 @@ def astar(origin_id: int, destination_id: int):
         # Retrieve stations that are near origin and destination to reduce
         # database lookups
         stations_by_id = get_stations(
+            graph_id=graph_id,
             station_ids=[origin_id, destination_id],
             stations_by_id=stations_by_id,
             session=session,
@@ -225,6 +233,7 @@ def astar(origin_id: int, destination_id: int):
                 next_station = stations_by_id.get(conn.to_station.id)
                 if not next_station:
                     get_surrounding_stations(
+                        graph_id=graph_id,
                         stations_by_id=stations_by_id,
                         latitude=conn.to_station.latitude,
                         longitude=conn.to_station.longitude,
@@ -311,7 +320,7 @@ def get_journey_times_and_routes(
 
     # Check for any missing journeys between stations
     station_pairs = set(station_pairs)
-    station_ids = [station.id for station in station_list]
+    station_ids = [db_station.id for db_station in station_list]
     missing_pairs = [
         pair for pair in itertools.permutations(
             station_ids, 2
@@ -341,12 +350,14 @@ def rename_journeys_file(journeys_file: Path):
 
 
 def get_paths(
+    graph_id: int,
     station_list: list[str] | None = None,
     journeys_filename: str = "journeys.json",
 ) -> list:
     """Get optimal paths between stations.
 
     Args:
+        graph_id (int): ID of graph record that stations belong to.
         station_list (list[str]): list of station IDs between which to find a
           path.
         journeys_filename (str): name of file in data directory that contains,
@@ -360,7 +371,7 @@ def get_paths(
 
     with SessionLocal() as session:
         station_list = station.get_many(
-            session=session, station_ids=station_list,
+            graph_id=graph_id, session=session, station_ids=station_list
         )
 
     # Check for pre-computed journeys
