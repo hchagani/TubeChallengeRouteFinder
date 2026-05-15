@@ -13,8 +13,9 @@ from uuid import uuid4
 from sqlalchemy.orm import Session
 
 from tubechallenge.algorithms.constants import PARK_STATION_IDS
-from tubechallenge.db import station
+from tubechallenge.db import line, station
 from tubechallenge.db.db import SessionLocal
+from tubechallenge.db.enums import ModeOfTransport
 from tubechallenge.db.tables import Station
 from tubechallenge.utils.haversine import get_bounding_box, get_heuristic
 
@@ -147,19 +148,12 @@ def get_stations(
     return stations_by_id
 
 
-def is_tube(line_id: int | None) -> bool:
-    """Verify whether line is tube line.
-
-    Args:
-        line_id (int): line database ID.
-
-    Returns:
-        boolean to indicate whether line is tube line.
-    """
-    return line_id is not None and line_id < 12
-
-
-def astar(graph_id: int, origin_id: int, destination_id: int):
+def astar(
+    graph_id: int,
+    origin_id: int,
+    destination_id: int,
+    line_is_tube: dict[int, bool],
+):
     """Implement A* pathfinding algorithm to find shortest path between
     stations.
 
@@ -167,6 +161,8 @@ def astar(graph_id: int, origin_id: int, destination_id: int):
         graph_id (int): ID for graph record that stations belong to.
         origin_id (int): origin station database ID.
         destination_id (int): destination station database ID.
+        line_is_tube (dict): indicates whether the line database ID represents
+          a tube line.
     """
     counter = itertools.count()
 
@@ -205,7 +201,7 @@ def astar(graph_id: int, origin_id: int, destination_id: int):
                 )
                 duration = path[-1][2]
 
-                tube_end = is_tube(path[-1][1])
+                tube_end = line_is_tube.get(path[-1][1], False)
                 key = (started_with_tube, tube_end)
 
                 if key not in best_paths or duration < best_paths[key]["duration"]:
@@ -252,7 +248,7 @@ def astar(graph_id: int, origin_id: int, destination_id: int):
 
                 # Establish whether first leg started with tube train
                 if started_with_tube is None:
-                    next_started_with_tube = is_tube(next_line)
+                    next_started_with_tube = line_is_tube.get(next_line, False)
                 else:
                     next_started_with_tube = started_with_tube
                 next_state = (next_station, next_line, next_started_with_tube)
@@ -373,6 +369,12 @@ def get_paths(
         station_list = station.get_many(
             graph_id=graph_id, session=session, station_ids=station_list
         )
+        line_list = line.get_many(graph_id=graph_id, session=session)
+
+    # Identify tube lines
+    line_is_tube = {
+        ln.id: ln.mode == ModeOfTransport.TUBE.value for ln in line_list
+    }
 
     # Check for pre-computed journeys
     journeys_file = TUBECHALLENGE_ROOT / "data" / journeys_filename
@@ -391,7 +393,9 @@ def get_paths(
 
     journeys = {}
     for origin, destination in itertools.permutations(station_list, 2):
-        reconstructed_journeys = astar(origin.id, destination.id)
+        reconstructed_journeys = astar(
+            graph_id, origin.id, destination.id, line_is_tube
+        )
 
         journeys[(origin.id, destination.id)] = reconstructed_journeys
 
