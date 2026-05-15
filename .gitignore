@@ -1,6 +1,10 @@
 # Database files
 data/
 
+# tubechallenge/data/ should not be ignored
+!tubechallenge/data/
+!tubechallange/data/**
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
