@@ -51,6 +51,7 @@ class CreateStation(BaseModel):
     zone: str
     latitude: float
     longitude: float
+    is_tube: bool
     graph_id: int
 
 

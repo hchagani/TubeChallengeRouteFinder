@@ -80,6 +80,7 @@ def get_many(
     graph_id: int,
     session: Session,
     station_ids: list[str] | None = None,
+    is_tube: bool | None = None,
     latitude_min: float | None = None,
     latitude_max: float | None = None,
     longitude_min: float | None = None,
@@ -93,6 +94,7 @@ def get_many(
         graph_id (int): ID of related graph record.
         session (Session): database session.
         station_ids (list[str]): list of station IDs to retrieve.
+        is_tube (bool): request tube stations only.
         latitude_min (float): station's minimum latitude coordinate.
         latitude_max (float): station's maximum latitude coordinate.
         longitude_min (float): station's minimum longitude coordinate.
@@ -108,6 +110,10 @@ def get_many(
     # Filter by station IDs if provided
     if station_ids and len(station_ids) > 0:
         query = query.filter(Station.station_id.in_(station_ids))
+
+    # Return tube or non-tube stations only if requested
+    if is_tube is not None:
+        query = query.filter(Station.is_tube == is_tube)
 
     if latitude_min is not None:
         query = query.filter(Station.latitude >= latitude_min)

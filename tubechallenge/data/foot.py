@@ -26,8 +26,8 @@ def get_running_connections(
     connections = {}
 
     # Get all tube stations
-    tube_stations = station.get_many(
-        graph_id=graph_id, limit=272, session=session
+    tube_statons = station.get_many(
+        graph_id=graph_id, is_tube=True, session=session
     )
 
     bb_side = 2700.0 / 1.3  # more realistic distance in curvy city streets (km)

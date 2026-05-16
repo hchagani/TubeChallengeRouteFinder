@@ -94,6 +94,7 @@ def generate_station_infos() -> Callable:
                     "zone": str(random.randint(1, 7)),
                     "latitude": 51.5074 + random.random() - 0.5,
                     "longitude": -0.1272 + random.random() - 0.5,
+                    "is_tube": random.random() < 0.5,
                     "graph_id": random.choice(graph_ids),
                 }
             )

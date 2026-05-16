@@ -168,6 +168,7 @@ class Station(BaseModel):
     latitude: Mapped[float] = mapped_column(index=True)
     longitude: Mapped[float] = mapped_column(index=True)
     is_open: Mapped[bool] = mapped_column(default=True)
+    is_tube: Mapped[bool]  # station has tube connection
     graph_id: Mapped[int] = mapped_column(
         ForeignKey("graphs.id"), nullable=False
     )

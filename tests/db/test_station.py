@@ -34,6 +34,7 @@ def test_create_station(
     assert new_station[0].latitude == station_infos[0]["latitude"]
     assert new_station[0].longitude == station_infos[0]["longitude"]
     assert new_station[0].is_open == True  # default value
+    assert new_station[0].is_tube == station_infos[0]["is_tube"]
     assert new_station[0].graph_id == new_graph.id
 
     # Check graph is associated with station
@@ -101,6 +102,7 @@ def test_get_station(
     assert station_rec.latitude == db_rec.latitude
     assert station_rec.longitude == db_rec.longitude
     assert station_rec.is_open == db_rec.is_open
+    assert station_rec.is_tube == db_rec.is_tube
     assert station_rec.graph_id == db_graph.id
 
 
@@ -108,7 +110,7 @@ def test_get_stations(
     db_graphs: Callable, db_stations: Callable, db_session: Session
 ):
     """Test: Get multiple station records from the database."""
-    db_graph = db_graphs()[0]  # create graph that station will belong to
+    db_graph = db_graphs()[0]  # create graph that stations will belong to
 
     n_stations = 4
     db_recs = db_stations(graph_ids=[db_graph.id], n_stations=n_stations)
@@ -126,6 +128,7 @@ def test_get_stations(
         assert station_rec.latitude == db_rec.latitude
         assert station_rec.longitude == db_rec.longitude
         assert station_rec.is_open == db_rec.is_open
+        assert station_rec.is_tube == db_rec.is_tube
         assert station_rec.graph_id == db_graph.id
 
 
@@ -135,7 +138,7 @@ def test_get_stations__with_limit_and_offset(
     """Test: Get a certain number of records (limit) from the database after a
     particular record (offset).
     """
-    db_graph = db_graphs()[0]  # create graph that station will belong to
+    db_graph = db_graphs()[0]  # create graph that stations will belong to
     n_stations = 6
     db_recs = db_stations(graph_ids=[db_graph.id], n_stations=n_stations)
     db_recs = sorted(db_recs, key=lambda sttn: sttn.id)
@@ -157,6 +160,7 @@ def test_get_stations__with_limit_and_offset(
         assert station_rec.latitude == db_rec.latitude
         assert station_rec.longitude == db_rec.longitude
         assert station_rec.is_open == db_rec.is_open
+        assert station_rec.is_tube == db_rec.is_tube
         assert station_rec.graph_id == db_rec.graph_id
 
 
@@ -166,7 +170,7 @@ def test_get_stations__from_station_list(
     """Test: Get multiple station records from the database that correspond to
     station IDs in a list.
     """
-    db_graph = db_graphs()[0]  # create graph that station will belong to
+    db_graph = db_graphs()[0]  # create graph that stations will belong to
     n_stations = 12
     n_selected_stations = random.randint(2, n_stations - 1)
 
@@ -188,3 +192,37 @@ def test_get_stations__from_station_list(
         rec for rec in db_recs if rec.station_id in selected_station_ids
     ]
     assert Counter(selected_db_recs) == Counter(station_recs)
+
+
+def test_get_stations__retrieve_tube_stations_only(
+    db_graphs: Callable,
+    generate_station_infos: Callable,
+    db_resource: Callable,
+    db_session: Session,
+):
+    """Test: Only retrieve tube stations from the database."""
+    db_graph = db_graphs()[0]  # create graph that stations will belong to
+    n_stations = 12
+    n_tube_stations = random.randint(2, n_stations - 1)
+
+    # Ensure that number of tube stations in database matches above number
+    station_infos = generate_station_infos(
+        graph_ids=[db_graph.id], n_stations=n_stations
+    )
+    station_types = [True] * n_tube_stations + [False] * (n_stations - n_tube_stations)
+    random.shuffle(station_types)
+    for station_info, station_type in zip(station_infos, station_types):
+        station_info["is_tube"] = station_type
+
+    db_recs = db_resource(station_infos, Station)  # create station records
+    db_recs = sorted(db_recs, key=lambda sttn: sttn.id)
+
+    # Retrieve tube stations from the database
+    station_recs = station.get_many(
+        graph_id=db_graph.id, is_tube=True, session=db_session
+    )
+
+    assert isinstance(station_recs, list)
+    assert len(station_recs) == n_tube_stations
+    tube_db_recs = [rec for rec in db_recs if rec.is_tube == True]
+    assert tube_db_recs == station_recs

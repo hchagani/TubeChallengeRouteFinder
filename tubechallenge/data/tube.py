@@ -143,6 +143,7 @@ def get_tube_stations(
                     "zone": zone,
                     "latitude": latitude,
                     "longitude": longitude,
+                    "is_tube": True,
                     "graph_id": graph_id,
                 }
             )
