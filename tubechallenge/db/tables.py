@@ -9,6 +9,7 @@ from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import declarative_base, mapped_column, relationship, Mapped
 
 from tubechallenge.db.constants import (
+    DEFAULT_SECONDS_PER_KM,
     MAX_LINE_ID_LENGTH,
     MAX_STATION_ID_LENGTH,
 )
@@ -18,6 +19,7 @@ from tubechallenge.db.enums import (
     ModeOfTransport,
     StatusFlag,
 )
+from tubechallenge.utils.serialise import serialise_time
 
 Base = declarative_base()
 
@@ -74,6 +76,9 @@ class Graph(BaseModel):
         nullable=False,
         default=StatusFlag.PENDING,
     )
+    run_pace: Mapped[int] = mapped_column(
+        Integer, default=DEFAULT_SECONDS_PER_KM
+    )  # used to calculate running journey times
     lines: Mapped[list["Line"]] = relationship(
         back_populates="graph", lazy="selectin", cascade="all, delete-orphan"
     )
@@ -101,6 +106,13 @@ class Graph(BaseModel):
     segments: Mapped[list["RouteSegment"]] = relationship(
         back_populates="graph", lazy="selectin", cascade="all, delete-orphan"
     )
+
+    def to_dict(self) -> dict:
+        result = super().to_dict()
+
+        result["run_pace"] = serialise_time(self.run_pace, return_hour=False)
+
+        return result
 
 
 class Line(BaseModel):

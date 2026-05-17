@@ -1,4 +1,4 @@
-from pydantic import BaseModel, constr
+from pydantic import BaseModel, constr, field_validator
 from typing import Optional
 
 from tubechallenge.db.constants import MAX_LINE_ID_LENGTH, MAX_STATION_ID_LENGTH
@@ -31,6 +31,24 @@ class CreateConnection(BaseModel):
     line_id: int
     time: int
     interval: int
+
+
+class CreateGraph(BaseModel):
+    name: Optional[str] = None
+    run_pace: Optional[int] = None
+
+    @field_validator("run_pace", mode="before")
+    @classmethod
+    def parse_run_pace(cls, value):
+        if isinstance(value, str):
+            try:
+                minutes, seconds = map(int, value.split(":"))
+            except ValueError:
+                raise ValueError("Duration must be in MM:SS format.")
+
+            return minutes * 60 + seconds
+
+        return value
 
 
 class CreateJob(BaseModel):

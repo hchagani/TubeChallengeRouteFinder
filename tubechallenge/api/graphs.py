@@ -21,6 +21,7 @@ router = APIRouter(tags=["graphs"])
 def create_graph(
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
+    run_pace: str | None = None,
     rebuild: bool = False,
 ) -> dict:
     """Create graph record. Currently, only one graph record can exist. Unless
@@ -30,13 +31,18 @@ def create_graph(
     Args:
         background_tasks (BackgroundTasks): allows for tasks to be run after
           returning a response.
+        run_pace (str): average run pace for connections on foot in MM:SS
+          format.
         session (Sesson): database session.
         rebuild (bool): flag to indicate whether database should be rebuilt.
 
     Returns:
         created graph record.
     """
-    result = graph.create(session=session, rebuild=rebuild)
+    graph_info = {"run_pace": run_pace}
+    result = graph.create(
+        session=session, graph_info=graph_info, rebuild=rebuild
+    )
 
     if result["status"] == StatusFlag.PENDING.value:
         if result.get("state") == "conflict":

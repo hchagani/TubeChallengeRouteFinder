@@ -4,24 +4,30 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from tubechallenge.db.constants import (
+    DEFAULT_GRAPH_NAME,
+    DEFAULT_SECONDS_PER_KM,
+)
 from tubechallenge.db.enums import StatusFlag
 from tubechallenge.db.db import get_session
-from tubechallenge.db.schemas import UpdateGraph
+from tubechallenge.db.schemas import CreateGraph, UpdateGraph
 from tubechallenge.db.tables import Base, Graph
+from tubechallenge.utils.serialise import serialise_time
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-DEFAULT_GRAPH_NAME = "default"
 
-
-def create(session: Session, rebuild: bool = False) -> dict:
+def create(
+    session: Session, graph_info: dict | None = None, rebuild: bool = False
+) -> dict | None:
     """Create new graph record. This record contains the metadata for the
     database. There can only be one graph record.
 
     Args:
-        session (Session): database session
-        rebuild (bool): flag to indicate whether database should be rebuilt
+        session (Session): database session.
+        graph_info (dict): data to create graph record.
+        rebuild (bool): flag to indicate whether database should be rebuilt.
 
     Returns:
         created graph record.
@@ -51,8 +57,23 @@ def create(session: Session, rebuild: bool = False) -> dict:
         delete(graph.id, session)
     session.expunge_all()  # clear identity map
 
+    # Validate data to create graph record
     try:
-        graph = Graph(name=DEFAULT_GRAPH_NAME, status=StatusFlag.PENDING)
+        graph_info = graph_info if graph_info else {}
+        if not graph_info.get("name", None):
+            graph_info["name"] = DEFAULT_GRAPH_NAME
+        validated_graph = CreateGraph(**graph_info)
+    except ValidationError as err:
+        logger.error(f"Validation failed for graph {graph_info}: {err}")
+        return None
+
+    try:
+        graph = Graph(
+            **validated_graph.model_dump(
+                exclude_unset=True, exclude_none=True
+            ),
+            status=StatusFlag.PENDING,
+        )
         session.add(graph)
         session.commit()
         session.refresh(graph)
@@ -64,7 +85,10 @@ def create(session: Session, rebuild: bool = False) -> dict:
         return None
 
     return {
-        "graph_id": graph.id, "name": graph.name, "status": graph.status.value
+        "graph_id": graph.id,
+        "name": graph.name,
+        "status": graph.status.value,
+        "run_pace": serialise_time(graph.run_pace, return_hour=False),
     }
 
 
@@ -156,6 +180,7 @@ def update(graph_id: int, graph_info: dict, session: Session) -> dict | None:
             "graph_id": db_graph.id,
             "name": db_graph.name,
             "status": db_graph.status.value,
+            "run_pace": serialise_time(db_graph.run_pace, return_hour=False),
         }
 
     except SQLAlchemyError as err:

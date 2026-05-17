@@ -1,11 +1,16 @@
 import logging
 import pytest
 import random
+import re
 from typing import Callable
 
 from sqlalchemy.orm import Session
 
 from tubechallenge.db import graph
+from tubechallenge.db.constants import (
+    DEFAULT_GRAPH_NAME,
+    DEFAULT_SECONDS_PER_KM,
+)
 from tubechallenge.db.enums import StatusFlag
 from tubechallenge.db.tables import (
     Branch,
@@ -27,8 +32,11 @@ def test_create_graph(db_session: Session, caplog: pytest.LogCaptureFixture):
     assert new_graph is not None
     assert isinstance(new_graph, dict)
     assert new_graph["graph_id"] is not None
-    assert new_graph["name"] == graph.DEFAULT_GRAPH_NAME
+    assert new_graph["name"] == DEFAULT_GRAPH_NAME
     assert new_graph["status"] == StatusFlag.PENDING.value
+    assert re.fullmatch(r"\d{2}:\d{2}", new_graph["run_pace"])
+    minutes, seconds = map(int, new_graph["run_pace"].split(":"))
+    assert DEFAULT_SECONDS_PER_KM == minutes * 60 + seconds
 
 
 def test_create_graph__graph_pending_reports_conflict(
@@ -115,8 +123,11 @@ def test_create_graph__rebuild_flag_replaces_graph(
     assert new_graph is not None
     assert isinstance(new_graph, dict)
     assert new_graph["graph_id"] is not None
-    assert new_graph["name"] == graph.DEFAULT_GRAPH_NAME
+    assert new_graph["name"] == DEFAULT_GRAPH_NAME
     assert new_graph["status"] == StatusFlag.PENDING.value
+    assert re.fullmatch(r"\d{2}:\d{2}", new_graph["run_pace"])
+    minutes, seconds = map(int, new_graph["run_pace"].split(":"))
+    assert DEFAULT_SECONDS_PER_KM == minutes * 60 + seconds
 
     # Check that graph record has been replaced and the database tables have
     # been reset (i.e. no station record exists)
@@ -128,10 +139,32 @@ def test_create_graph__rebuild_flag_replaces_graph(
     assert new_graph_rec[0].date_created > original_date_created
     assert new_graph_rec[0].last_updated > original_last_updated
     assert new_graph_rec[0].date_created == new_graph_rec[0].last_updated
-    assert new_graph_rec[0].name == graph.DEFAULT_GRAPH_NAME
+    assert new_graph_rec[0].name == DEFAULT_GRAPH_NAME
     assert new_graph_rec[0].status == StatusFlag.PENDING
+    assert isinstance(new_graph_rec[0].run_pace, int)
+    assert new_graph_rec[0].run_pace == DEFAULT_SECONDS_PER_KM
 
     assert len(new_station_rec) == 0  # there should be no station records
+
+
+def test_create_graph__run_pace_is_invalid(
+    generate_graph_infos: Callable,
+    db_session: Session,
+    caplog: pytest.LogCaptureFixture
+):
+    """Test: Create a graph record in the database with an invalid run pace.
+    Logs an error and returns None.
+    """
+    graph_info = generate_graph_infos(n_graphs=1)[0]
+    graph_info["run_pace"] = "06;00"
+
+    with caplog.at_level(logging.INFO):
+        new_graph = graph.create(graph_info=graph_info, session=db_session)
+
+    assert "Validation failed for graph" in caplog.records[0].message
+    assert "Duration must be in MM:SS format." in caplog.records[0].message
+
+    assert new_graph is None
 
 
 def test_get_graph(db_graphs: Callable, db_session: Session):
@@ -142,6 +175,7 @@ def test_get_graph(db_graphs: Callable, db_session: Session):
     assert graph_rec.id == db_graph.id
     assert graph_rec.name == db_graph.name
     assert graph_rec.status == db_graph.status
+    assert graph_rec.run_pace == db_graph.run_pace
 
 
 def test_get_graphs(db_graphs: Callable, db_session: Session):
@@ -158,6 +192,7 @@ def test_get_graphs(db_graphs: Callable, db_session: Session):
         assert graph_rec.id == db_rec.id
         assert graph_rec.name == db_rec.name
         assert graph_rec.status == db_rec.status
+        assert graph_rec.run_pace == db_rec.run_pace
 
 
 def test_get_graphs__with_graph_ids(db_graphs: Callable, db_session: Session):
@@ -179,6 +214,7 @@ def test_get_graphs__with_graph_ids(db_graphs: Callable, db_session: Session):
         assert graph_rec.id == db_rec.id
         assert graph_rec.name == db_rec.name
         assert graph_rec.status == db_rec.status
+        assert graph_rec.run_pace == db_rec.run_pace
 
 
 def test_get_graphs__with_limit_and_offset(
@@ -202,6 +238,7 @@ def test_get_graphs__with_limit_and_offset(
         assert graph_rec.id == db_rec.id
         assert graph_rec.name == db_rec.name
         assert graph_rec.status == db_rec.status
+        assert graph_rec.run_pace == db_rec.run_pace
 
 
 def test_update_graph(

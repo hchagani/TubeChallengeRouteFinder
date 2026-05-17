@@ -1,12 +1,28 @@
+import pytest
+import re
+from typing import Callable
 from unittest.mock import ANY, patch
 
 from fastapi import status
 from fastapi.testclient import TestClient
 
 from tubechallenge.api.app import ROUTER_PREFIX
+from tubechallenge.db.constants import (
+    DEFAULT_GRAPH_NAME,
+    DEFAULT_SECONDS_PER_KM,
+)
 from tubechallenge.db.enums import StatusFlag
-from tubechallenge.db.graph import DEFAULT_GRAPH_NAME
-from tubechallenge.db.tables import Graph
+
+
+@pytest.fixture
+def get_run_pace_string() -> Callable:
+    def _get_run_pace_string(run_pace: int) -> str:
+        """Convert run pace in seconds to HH:SS string format."""
+        minutes, seconds = divmod(run_pace, 60)
+
+        return f"{minutes:02d}:{seconds:02d}"
+
+    return _get_run_pace_string
 
 
 def test_create_graph__returns_created_record_and_starts_fill_db_task(
@@ -24,12 +40,39 @@ def test_create_graph__returns_created_record_and_starts_fill_db_task(
     assert "graph_id" in payload
     assert payload["name"] == DEFAULT_GRAPH_NAME
     assert payload["status"] == StatusFlag.PENDING.value
+    assert re.fullmatch(r"\d{2}:\d{2}", payload["run_pace"])
+    minutes, seconds = map(int, payload["run_pace"].split(":"))
+    assert DEFAULT_SECONDS_PER_KM == minutes * 60 + seconds
+
+    mock_fill.assert_called_with(payload["graph_id"])
+
+
+def test_create_graph__returns_created_record_with_non_default_run_pace(
+        client: TestClient, get_run_pace_string: Callable
+):
+    """Test: Create new graph record with run pace."""
+    # Set run pace for test and check it differs from default
+    run_pace = "06:30"
+    assert get_run_pace_string(DEFAULT_SECONDS_PER_KM) != run_pace
+
+    with patch("tubechallenge.api.graphs.fill_db") as mock_fill:
+        response = client.put(
+            f"{ROUTER_PREFIX}/graphs", params={"run_pace": run_pace}
+        )
+
+    assert response.status_code == status.HTTP_202_ACCEPTED
+
+    payload = response.json()
+    assert "graph_id" in payload
+    assert payload["name"] == DEFAULT_GRAPH_NAME
+    assert payload["status"] == StatusFlag.PENDING.value
+    assert payload["run_pace"] == run_pace
 
     mock_fill.assert_called_with(payload["graph_id"])
 
 
 def test_create_graph__reports_database_build_in_progress(
-    client: TestClient, db_graphs: Graph
+    client: TestClient, db_graphs: Callable
 ):
     """Test: Attempt to create a new graph record when one exists in the
     database.
@@ -61,7 +104,9 @@ def test_create_graph__reports_completed_graph_exists(client: TestClient):
             response = client.put(f"{ROUTER_PREFIX}/graphs")
 
     assert response.status_code == status.HTTP_200_OK
-    mock_create.assert_called_once_with(session=ANY, rebuild=False)
+    mock_create.assert_called_once_with(
+        session=ANY, graph_info=ANY, rebuild=False
+    )
     mock_fill.assert_not_called()
 
     payload = response.json()
@@ -76,17 +121,22 @@ def test_create_graph__rebuild_flag_passed_correctly(client: TestClient):
                 "graph_id": 1,
                 "name": DEFAULT_GRAPH_NAME,
                 "status": StatusFlag.PENDING.value,
+                "run_pace": "06:00",
             }
 
             response = client.put(
                 f"{ROUTER_PREFIX}/graphs", params={"rebuild": True}
             )
 
-    mock_create.assert_called_once_with(session=ANY, rebuild=True)
+    mock_create.assert_called_once_with(
+        session=ANY, graph_info=ANY, rebuild=True
+    )
     mock_fill.assert_called_once()
 
 
-def test_get_graphs__returns_all_graphs(client: TestClient, db_graphs: Graph):
+def test_get_graphs__returns_all_graphs(
+    client: TestClient, db_graphs: Callable, get_run_pace_string: Callable
+):
     """Test: Retrieve all graphs from database."""
     n_graphs = 3
     new_graphs = db_graphs(n_graphs=n_graphs)
@@ -96,6 +146,7 @@ def test_get_graphs__returns_all_graphs(client: TestClient, db_graphs: Graph):
             "id": new_graph.id,
             "name": new_graph.name,
             "status": new_graph.status.value,
+            "run_pace": get_run_pace_string(new_graph.run_pace),
             "date_created": new_graph.date_created.isoformat(),
             "last_updated": new_graph.last_updated.isoformat(),
         } for new_graph in new_graphs
@@ -111,7 +162,7 @@ def test_get_graphs__returns_all_graphs(client: TestClient, db_graphs: Graph):
 
 
 def test_get_graphs__returns_graphs_according_to_limit_after_offset(
-    client: TestClient, db_graphs: Graph
+    client: TestClient, db_graphs: Callable, get_run_pace_string: Callable
 ):
     """Test: Retrieve graphs from database according to limit after an
     offset.
@@ -126,6 +177,7 @@ def test_get_graphs__returns_graphs_according_to_limit_after_offset(
             "id": new_graph.id,
             "name": new_graph.name,
             "status": new_graph.status.value,
+            "run_pace": get_run_pace_string(new_graph.run_pace),
             "date_created": new_graph.date_created.isoformat(),
             "last_updated": new_graph.last_updated.isoformat(),
         } for new_graph in new_graphs[offset:offset + limit + 1]
@@ -143,7 +195,7 @@ def test_get_graphs__returns_graphs_according_to_limit_after_offset(
 
 
 def test_get_graphs__returns_graphs_according_to_requested_ids(
-    client: TestClient, db_graphs: Graph
+    client: TestClient, db_graphs: Callable, get_run_pace_string: Callable
 ):
     """Test: Retrieves graphs according to requested IDs."""
     n_graphs = 3
@@ -155,6 +207,7 @@ def test_get_graphs__returns_graphs_according_to_requested_ids(
             "id": new_graph.id,
             "name": new_graph.name,
             "status": new_graph.status.value,
+            "run_pace": get_run_pace_string(new_graph.run_pace),
             "date_created": new_graph.date_created.isoformat(),
             "last_updated": new_graph.last_updated.isoformat(),
         } for new_graph in new_graphs_selected
@@ -173,7 +226,7 @@ def test_get_graphs__returns_graphs_according_to_requested_ids(
 
 
 def test_get_graphs__returns_graphs_ignoring_duplicate_requested_ids(
-    client: TestClient, db_graphs: Graph
+    client: TestClient, db_graphs: Callable, get_run_pace_string: Callable
 ):
     """Test: Retrieves graphs according to requested IDs, ignoring duplicated
     IDs.
@@ -187,6 +240,7 @@ def test_get_graphs__returns_graphs_ignoring_duplicate_requested_ids(
             "id": new_graph.id,
             "name": new_graph.name,
             "status": new_graph.status.value,
+            "run_pace": get_run_pace_string(new_graph.run_pace),
             "date_created": new_graph.date_created.isoformat(),
             "last_updated": new_graph.last_updated.isoformat(),
         } for new_graph in new_graphs_selected
@@ -256,13 +310,16 @@ def test_get_graphs__returns_error_if_offset_is_negative(client: TestClient):
     assert error["type"] == "greater_than_equal"
 
 
-def test_get_graph__returns_graph(client: TestClient, db_graphs: Graph):
+def test_get_graph__returns_graph(
+    client: TestClient, db_graphs: Callable, get_run_pace_string: Callable
+):
     """Test: Retrieve an existing graph."""
     db_graph = db_graphs()[0]
     db_graph_dict = {
         "id": db_graph.id,
         "name": db_graph.name,
         "status": db_graph.status.value,
+        "run_pace": get_run_pace_string(db_graph.run_pace),
         "date_created": db_graph.date_created.isoformat(),
         "last_updated": db_graph.last_updated.isoformat(),
     }

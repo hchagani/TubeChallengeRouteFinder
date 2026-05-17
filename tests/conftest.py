@@ -1,4 +1,5 @@
 import pytest
+import random
 from typing import Callable
 
 from sqlalchemy import create_engine
@@ -71,7 +72,13 @@ def generate_graph_infos() -> Callable:
         """
         graph_infos = []
         for idx in range(n_graphs):
-            graph_infos.append({"name": f"Test Graph {idx}"})  # Increment name
+            # Increment name and randomise run pace between 5:00/km and 7:00/km
+            graph_infos.append(
+                {
+                    "name": f"Test Graph {idx}",
+                    "run_pace": random.randint(300, 420),
+                },
+            )
 
         return graph_infos
 
