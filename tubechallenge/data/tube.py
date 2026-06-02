@@ -1,7 +1,6 @@
 from collections import Counter
 import logging
 import numpy as np
-from operator import itemgetter
 import requests
 import sys
 import time
