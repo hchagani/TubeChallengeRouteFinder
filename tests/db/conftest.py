@@ -72,13 +72,14 @@ def db_lines(generate_line_infos: Callable, db_resource: Callable) -> Callable:
 @pytest.fixture
 def generate_station_infos() -> Callable:
     def _generate_station_infos(
-        graph_ids: list[int], n_stations: int = 1
+        graph_ids: list[int], n_stations: int = 1, all_tube: bool = False
     ) -> list[dict]:
         """Generate data for station records.
 
         Args:
             graph_ids (list[int]): list of graph record IDs.
             n_stations (int): number of stations.
+            all_tube (bool): all stations are tube stations if true.
 
         Returns:
             list of data required to create station records.
@@ -94,7 +95,7 @@ def generate_station_infos() -> Callable:
                     "zone": str(random.randint(1, 7)),
                     "latitude": 51.5074 + random.random() - 0.5,
                     "longitude": -0.1272 + random.random() - 0.5,
-                    "is_tube": random.random() < 0.5,
+                    "is_tube": random.random() < (0.5 + (0.5 * all_tube)),
                     "graph_id": random.choice(graph_ids),
                 }
             )
@@ -109,18 +110,19 @@ def db_stations(
     generate_station_infos: Callable, db_resource: Callable
 ) -> Callable:
     def _db_stations(
-        graph_ids: list[int], n_stations: int = 1
+        graph_ids: list[int], n_stations: int = 1, all_tube: bool = False
     ) -> list[Station]:
         """Create records for stations in the database.
 
         Args:
             graph_ids (list[int]): list of graph record IDs.
             n_stations (int): number of stations.
+            all_tube (bool): all stations are tube stations if true.
 
         Returns:
             station records that have been written to the database.
         """
-        station_infos = generate_station_infos(graph_ids, n_stations)
+        station_infos = generate_station_infos(graph_ids, n_stations, all_tube)
 
         return db_resource(station_infos, Station)
 

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, constr, field_validator
+from pydantic import BaseModel, constr, field_validator, model_validator
 from typing import Optional
 
 from tubechallenge.db.constants import MAX_LINE_ID_LENGTH, MAX_STATION_ID_LENGTH
@@ -71,6 +71,21 @@ class CreateStation(BaseModel):
     longitude: float
     is_tube: bool
     graph_id: int
+
+
+class CreateStationPair(BaseModel):
+    origin_station_id: int
+    destination_station_id: int
+    graph_id: int
+
+    @model_validator(mode="after")
+    def check_stations_are_different(self):
+        if self.origin_station_id == self.destination_station_id:
+            raise ValueError(
+                "Origin and destination stations must be different."
+            )
+
+        return self
 
 
 class UpdateGraph(BaseModel):

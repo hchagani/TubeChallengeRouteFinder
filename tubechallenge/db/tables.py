@@ -291,12 +291,14 @@ class StationPair(BaseModel):
         UniqueConstraint(
             "origin_station_id",
             "destination_station_id",
-            name="uq_origin_destination",
+            "graph_id",
+            name="uq_origin_destination_graph",
         ),
         Index(
-            "idx_origin_destination",
+            "idx_origin_destination_graph",
             "origin_station_id",
             "destination_station_id",
+            "graph_id",
         ),
     )
 
