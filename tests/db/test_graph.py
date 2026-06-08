@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from tubechallenge.db import graph
 from tubechallenge.db.constants import (
     DEFAULT_GRAPH_NAME,
+    DEFAULT_MAX_RUN_DISTANCE,
     DEFAULT_SECONDS_PER_KM,
 )
 from tubechallenge.db.enums import StatusFlag
@@ -37,6 +38,7 @@ def test_create_graph(db_session: Session, caplog: pytest.LogCaptureFixture):
     assert re.fullmatch(r"\d{2}:\d{2}", new_graph["run_pace"])
     minutes, seconds = map(int, new_graph["run_pace"].split(":"))
     assert DEFAULT_SECONDS_PER_KM == minutes * 60 + seconds
+    assert new_graph["max_run_distance"] == DEFAULT_MAX_RUN_DISTANCE
 
 
 def test_create_graph__graph_pending_reports_conflict(
@@ -176,6 +178,7 @@ def test_get_graph(db_graphs: Callable, db_session: Session):
     assert graph_rec.name == db_graph.name
     assert graph_rec.status == db_graph.status
     assert graph_rec.run_pace == db_graph.run_pace
+    assert graph_rec.max_run_distance == db_graph.max_run_distance
 
 
 def test_get_graphs(db_graphs: Callable, db_session: Session):
@@ -193,6 +196,7 @@ def test_get_graphs(db_graphs: Callable, db_session: Session):
         assert graph_rec.name == db_rec.name
         assert graph_rec.status == db_rec.status
         assert graph_rec.run_pace == db_rec.run_pace
+        assert graph_rec.max_run_distance == db_rec.max_run_distance
 
 
 def test_get_graphs__with_graph_ids(db_graphs: Callable, db_session: Session):
@@ -215,6 +219,7 @@ def test_get_graphs__with_graph_ids(db_graphs: Callable, db_session: Session):
         assert graph_rec.name == db_rec.name
         assert graph_rec.status == db_rec.status
         assert graph_rec.run_pace == db_rec.run_pace
+        assert graph_rec.max_run_distance == db_rec.max_run_distance
 
 
 def test_get_graphs__with_limit_and_offset(
@@ -239,6 +244,7 @@ def test_get_graphs__with_limit_and_offset(
         assert graph_rec.name == db_rec.name
         assert graph_rec.status == db_rec.status
         assert graph_rec.run_pace == db_rec.run_pace
+        assert graph_rec.max_run_distance == db_rec.max_run_distance
 
 
 def test_update_graph(

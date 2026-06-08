@@ -22,6 +22,7 @@ def create_graph(
     background_tasks: BackgroundTasks,
     session: Session = Depends(get_session),
     run_pace: str | None = None,
+    max_run_distance: float | None = None,
     rebuild: bool = False,
 ) -> dict:
     """Create graph record. Currently, only one graph record can exist. Unless
@@ -33,13 +34,15 @@ def create_graph(
           returning a response.
         run_pace (str): average run pace for connections on foot in MM:SS
           format.
+        max_run_distance (float): maximum running distance for connection on
+          foot.
         session (Sesson): database session.
         rebuild (bool): flag to indicate whether database should be rebuilt.
 
     Returns:
         created graph record.
     """
-    graph_info = {"run_pace": run_pace}
+    graph_info = {"run_pace": run_pace, "max_run_distance": max_run_distance}
     result = graph.create(
         session=session, graph_info=graph_info, rebuild=rebuild
     )

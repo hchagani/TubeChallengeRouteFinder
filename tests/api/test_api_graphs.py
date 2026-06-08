@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from tubechallenge.api.app import ROUTER_PREFIX
 from tubechallenge.db.constants import (
     DEFAULT_GRAPH_NAME,
+    DEFAULT_MAX_RUN_DISTANCE,
     DEFAULT_SECONDS_PER_KM,
 )
 from tubechallenge.db.enums import StatusFlag
@@ -43,12 +44,13 @@ def test_create_graph__returns_created_record_and_starts_fill_db_task(
     assert re.fullmatch(r"\d{2}:\d{2}", payload["run_pace"])
     minutes, seconds = map(int, payload["run_pace"].split(":"))
     assert DEFAULT_SECONDS_PER_KM == minutes * 60 + seconds
+    assert payload["max_run_distance"] == DEFAULT_MAX_RUN_DISTANCE
 
     mock_fill.assert_called_with(payload["graph_id"])
 
 
 def test_create_graph__returns_created_record_with_non_default_run_pace(
-        client: TestClient, get_run_pace_string: Callable
+    client: TestClient, get_run_pace_string: Callable
 ):
     """Test: Create new graph record with run pace."""
     # Set run pace for test and check it differs from default
@@ -67,6 +69,35 @@ def test_create_graph__returns_created_record_with_non_default_run_pace(
     assert payload["name"] == DEFAULT_GRAPH_NAME
     assert payload["status"] == StatusFlag.PENDING.value
     assert payload["run_pace"] == run_pace
+    assert payload["max_run_distance"] == DEFAULT_MAX_RUN_DISTANCE
+
+    mock_fill.assert_called_with(payload["graph_id"])
+
+
+def test_create_graph__returns_created_record_with_non_default_max_run_distance(
+    client: TestClient
+):
+    """Test: Create new graph record with maximum run distance."""
+    # Set maximum run distance and check it differs from default
+    max_run_distance = 3.5
+    assert max_run_distance != DEFAULT_MAX_RUN_DISTANCE
+
+    with patch("tubechallenge.api.graphs.fill_db") as mock_fill:
+        response = client.put(
+            f"{ROUTER_PREFIX}/graphs",
+            params={"max_run_distance": max_run_distance},
+        )
+
+    assert response.status_code == status.HTTP_202_ACCEPTED
+
+    payload = response.json()
+    assert "graph_id" in payload
+    assert payload["name"] == DEFAULT_GRAPH_NAME
+    assert payload["status"] == StatusFlag.PENDING.value
+    assert re.fullmatch(r"\d{2}:\d{2}", payload["run_pace"])
+    minutes, seconds = map(int, payload["run_pace"].split(":"))
+    assert DEFAULT_SECONDS_PER_KM == minutes * 60 + seconds
+    assert payload["max_run_distance"] == max_run_distance
 
     mock_fill.assert_called_with(payload["graph_id"])
 
@@ -147,6 +178,7 @@ def test_get_graphs__returns_all_graphs(
             "name": new_graph.name,
             "status": new_graph.status.value,
             "run_pace": get_run_pace_string(new_graph.run_pace),
+            "max_run_distance": new_graph.max_run_distance,
             "date_created": new_graph.date_created.isoformat(),
             "last_updated": new_graph.last_updated.isoformat(),
         } for new_graph in new_graphs
@@ -178,6 +210,7 @@ def test_get_graphs__returns_graphs_according_to_limit_after_offset(
             "name": new_graph.name,
             "status": new_graph.status.value,
             "run_pace": get_run_pace_string(new_graph.run_pace),
+            "max_run_distance": new_graph.max_run_distance,
             "date_created": new_graph.date_created.isoformat(),
             "last_updated": new_graph.last_updated.isoformat(),
         } for new_graph in new_graphs[offset:offset + limit + 1]
@@ -208,6 +241,7 @@ def test_get_graphs__returns_graphs_according_to_requested_ids(
             "name": new_graph.name,
             "status": new_graph.status.value,
             "run_pace": get_run_pace_string(new_graph.run_pace),
+            "max_run_distance": new_graph.max_run_distance,
             "date_created": new_graph.date_created.isoformat(),
             "last_updated": new_graph.last_updated.isoformat(),
         } for new_graph in new_graphs_selected
@@ -241,6 +275,7 @@ def test_get_graphs__returns_graphs_ignoring_duplicate_requested_ids(
             "name": new_graph.name,
             "status": new_graph.status.value,
             "run_pace": get_run_pace_string(new_graph.run_pace),
+            "max_run_distance": new_graph.max_run_distance,
             "date_created": new_graph.date_created.isoformat(),
             "last_updated": new_graph.last_updated.isoformat(),
         } for new_graph in new_graphs_selected
@@ -320,6 +355,7 @@ def test_get_graph__returns_graph(
         "name": db_graph.name,
         "status": db_graph.status.value,
         "run_pace": get_run_pace_string(db_graph.run_pace),
+        "max_run_distance": db_graph.max_run_distance,
         "date_created": db_graph.date_created.isoformat(),
         "last_updated": db_graph.last_updated.isoformat(),
     }

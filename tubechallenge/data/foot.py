@@ -30,12 +30,15 @@ def get_running_connections(
     db_graph = graph.get_one(graph_id=graph_id, session=session)
     running_speed = (60000) / db_graph.run_pace  # metres per minute
 
+    # Convert maximuum running distance from km to m and divide by 1.3 to give
+    # a more realistic distance in curcy city streets
+    bb_side = (1000 * graph.max_run_distance) / 1.3
+
     # Get all tube stations
     tube_statons = station.get_many(
         graph_id=graph_id, is_tube=True, session=session
     )
 
-    bb_side = 2700.0 / 1.3  # more realistic distance in curvy city streets (km)
     for tube_station in tube_stations:
         lat_min, lat_max, lon_min, lon_max = get_bounding_box(
             tube_station.latitude, tube_station.longitude, bb_side

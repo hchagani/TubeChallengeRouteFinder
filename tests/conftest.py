@@ -77,6 +77,7 @@ def generate_graph_infos() -> Callable:
                 {
                     "name": f"Test Graph {idx}",
                     "run_pace": random.randint(300, 420),
+                    "max_run_distance": 3 * random.random() + 2,  #  2-5 km
                 },
             )
 

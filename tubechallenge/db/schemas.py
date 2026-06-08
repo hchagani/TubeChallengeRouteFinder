@@ -36,6 +36,7 @@ class CreateConnection(BaseModel):
 class CreateGraph(BaseModel):
     name: Optional[str] = None
     run_pace: Optional[int] = None
+    max_run_distance: Optional[float] = None
 
     @field_validator("run_pace", mode="before")
     @classmethod

@@ -89,6 +89,7 @@ def create(
         "name": graph.name,
         "status": graph.status.value,
         "run_pace": serialise_time(graph.run_pace, return_hour=False),
+        "max_run_distance": graph.max_run_distance,
     }
 
 
@@ -181,6 +182,7 @@ def update(graph_id: int, graph_info: dict, session: Session) -> dict | None:
             "name": db_graph.name,
             "status": db_graph.status.value,
             "run_pace": serialise_time(db_graph.run_pace, return_hour=False),
+            "max_run_distance": db_graph.max_run_distance,
         }
 
     except SQLAlchemyError as err:

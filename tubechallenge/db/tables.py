@@ -2,13 +2,14 @@ from datetime import datetime, timezone
 from functools import partial
 
 from sqlalchemy import Enum as SAEnum
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String
 from sqlalchemy import Index, UniqueConstraint
 from sqlalchemy.engine.default import DefaultExecutionContext
 from sqlalchemy.inspection import inspect
 from sqlalchemy.orm import declarative_base, mapped_column, relationship, Mapped
 
 from tubechallenge.db.constants import (
+    DEFAULT_MAX_RUN_DISTANCE,
     DEFAULT_SECONDS_PER_KM,
     MAX_LINE_ID_LENGTH,
     MAX_STATION_ID_LENGTH,
@@ -79,6 +80,9 @@ class Graph(BaseModel):
     run_pace: Mapped[int] = mapped_column(
         Integer, default=DEFAULT_SECONDS_PER_KM
     )  # used to calculate running journey times
+    max_run_distance: Mapped[float] = mapped_column(
+        Float, default=DEFAULT_MAX_RUN_DISTANCE
+    )
     lines: Mapped[list["Line"]] = relationship(
         back_populates="graph", lazy="selectin", cascade="all, delete-orphan"
     )
