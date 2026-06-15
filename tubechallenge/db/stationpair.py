@@ -5,10 +5,10 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from tubechallenge.db.graph import get_many as get_graphs
 from tubechallenge.db.station import get_many as get_stations
 from tubechallenge.db.schemas import CreateStationPair
 from tubechallenge.db.tables import StationPair
+from tubechallenge.db.utils import get_graph_ids
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -28,10 +28,7 @@ def create(
         list of created station pair records.
     """
     # Get IDs for graphs to associate with station pairs
-    graph_ids = [
-        stationpair_info["graph_id"] for stationpair_info in stationpair_infos
-    ]
-    db_graph_ids = {g.id for g in get_graphs(session, graph_ids=graph_ids)}
+    db_graph_ids = get_graph_ids(stationpair_infos, session)
 
     # Get map between TfL and database IDs for stations
     station_map = {}

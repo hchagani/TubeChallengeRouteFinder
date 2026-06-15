@@ -4,9 +4,9 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from tubechallenge.db.graph import get_many as get_graphs
 from tubechallenge.db.schemas import CreateBranch
 from tubechallenge.db.tables import Branch, BranchStation, Line, Station
+from tubechallenge.db.utils import get_graph_ids
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -27,8 +27,7 @@ def create(
     Returns:
         list of created branch records.
     """
-    graph_ids = [branch_info["graph_id"] for branch_info in branch_infos]
-    db_graph_ids = {g.id for g in get_graphs(session, graph_ids=graph_ids)}
+    db_graph_ids = get_graph_ids(branch_infos, session)
 
     branches = []
     for branch_info in branch_infos:

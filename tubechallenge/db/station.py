@@ -4,9 +4,9 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from tubechallenge.db.graph import get_many as get_graphs
 from tubechallenge.db.schemas import CreateStation
 from tubechallenge.db.tables import Station
+from tubechallenge.db.utils import get_graph_ids
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,8 +22,7 @@ def create(station_infos: list[dict], session: Session) -> list[Station] | None:
     Returns:
         list of created station records
     """
-    graph_ids = {station_info["graph_id"] for station_info in station_infos}
-    db_graph_ids = {g.id for g in get_graphs(session, graph_ids=graph_ids)}
+    db_graph_ids = get_graph_ids(station_infos, session)
 
     # Validate station dictionary and create records
     stations = []

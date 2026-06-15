@@ -4,9 +4,9 @@ from pydantic import ValidationError
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from tubechallenge.db.graph import get_many as get_graphs
 from tubechallenge.db.schemas import CreateLine
 from tubechallenge.db.tables import Line
+from tubechallenge.db.utils import get_graph_ids
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -22,8 +22,7 @@ def create(line_infos: list[dict], session: Session) -> list[Line] | None:
     Returns:
         list of created line records.
     """
-    graph_ids = {line_info["graph_id"] for line_info in line_infos}
-    db_graph_ids = {g.id for g in get_graphs(session, graph_ids=graph_ids)}
+    db_graph_ids = get_graph_ids(line_infos, session)
 
     # Validate input data for lines and create records
     lines = []
