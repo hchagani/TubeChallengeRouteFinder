@@ -1,5 +1,4 @@
 from collections import Counter
-import itertools
 import logging
 import pytest
 import random
@@ -8,74 +7,7 @@ from typing import Callable
 from sqlalchemy.orm import Session
 
 from tubechallenge.db import stationpair
-from tubechallenge.db.tables import Graph, Station, StationPair
-
-
-@pytest.fixture
-def generate_stationpair_infos() -> Callable:
-    def _generate_stationpair_infos(
-        graph_id: int, station_ids: list[str], n_pairs: int = 1
-    ) -> list[dict]:
-        """Generate data for station pair records.
-
-        Args:
-            graph_ids (list[int]): ID for graph record.
-            station_ids (list[str]): list of station IDs.
-            n_pairs (int): number of station pairs to generate.
-
-        Returns:
-            list of data required to create station pair records.
-        """
-        station_pairs = list(itertools.permutations(station_ids, 2))
-        station_pairs = random.sample(station_pairs, n_pairs)
-
-        stationpair_infos = []
-        for station_pair in station_pairs:
-            stationpair_infos.append(
-                {
-                    "origin_station_id": station_pair[0],
-                    "destination_station_id": station_pair[1],
-                    "graph_id": graph_id,
-                }
-            )
-
-        return stationpair_infos
-
-    return _generate_stationpair_infos
-
-
-@pytest.fixture
-def db_stationpairs(
-    generate_stationpair_infos: Callable, db_resource: Callable
-) -> Callable:
-    def _db_stationpairs(
-        graph_id: int, station_map: dict[str, int], n_pairs: int = 1
-    ) -> list[StationPair]:
-        """Create records for station pairs in the database.
-
-        Args:
-            graph_id (int): ID for graph record.
-            station_map (dict[str, int]): map between TfL and database IDs for
-              stations.
-            n_pairs (int): number of station pairs to generate.
-
-        Returns:
-            station pair records that have been written to the database.
-        """
-        stationpair_infos = generate_stationpair_infos(
-            graph_id=graph_id,
-            station_ids=list(station_map.keys()),
-            n_pairs=n_pairs,
-        )
-
-        stationpair_data = stationpair_infos.copy()
-        for idx, stationpair_info in enumerate(stationpair_infos):
-            for stn in ["origin_station_id", "destination_station_id"]:
-                stationpair_data[idx][stn] = station_map[stationpair_info[stn]]
-
-        return db_resource(stationpair_data, StationPair)
-
-    return _db_stationpairs
+from tubechallenge.db.tables import Graph, Station
 
 
 def test_create_stationpair(
